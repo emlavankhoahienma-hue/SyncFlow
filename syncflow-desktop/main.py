@@ -81,40 +81,40 @@ def main(page: ft.Page):
         bgcolor=DSColor.SURFACE,
         indicator_color=DSColor.PRIMARY,
         leading=ft.Container(
-            padding=ft.padding.symmetric(vertical=DSSpacing.LG),
+            padding=ft.Padding.symmetric(vertical=DSSpacing.LG),
             content=ft.Container(
                 width=36,
                 height=36,
                 border_radius=DSRadius.ICON_BLOCK,
                 bgcolor=DSColor.PRIMARY,
-                alignment=ft.alignment.center,
-                content=ft.Icon(ft.icons.SYNC_ROUNDED, color=ft.colors.WHITE, size=20),
+                alignment=ft.Alignment(0, 0),
+                content=ft.Icon(ft.Icons.SYNC_ROUNDED, color=ft.Colors.WHITE, size=20),
             )
         ),
         destinations=[
             ft.NavigationRailDestination(
-                icon=ft.icons.HOME_OUTLINED,
-                selected_icon=ft.icons.HOME_ROUNDED,
+                icon=ft.Icons.HOME_OUTLINED,
+                selected_icon=ft.Icons.HOME_ROUNDED,
                 label="Trang chủ"
             ),
             ft.NavigationRailDestination(
-                icon=ft.icons.UPLOAD_OUTLINED,
-                selected_icon=ft.icons.UPLOAD_ROUNDED,
+                icon=ft.Icons.UPLOAD_OUTLINED,
+                selected_icon=ft.Icons.UPLOAD_ROUNDED,
                 label="Gửi"
             ),
             ft.NavigationRailDestination(
-                icon=ft.icons.DOWNLOAD_OUTLINED,
-                selected_icon=ft.icons.DOWNLOAD_ROUNDED,
+                icon=ft.Icons.DOWNLOAD_OUTLINED,
+                selected_icon=ft.Icons.DOWNLOAD_ROUNDED,
                 label="Nhận"
             ),
             ft.NavigationRailDestination(
-                icon=ft.icons.TIMELAPSE_OUTLINED,
-                selected_icon=ft.icons.TIMELAPSE_ROUNDED,
+                icon=ft.Icons.TIMELAPSE_OUTLINED,
+                selected_icon=ft.Icons.TIMELAPSE_ROUNDED,
                 label="Tiến độ"
             ),
             ft.NavigationRailDestination(
-                icon=ft.icons.SETTINGS_OUTLINED,
-                selected_icon=ft.icons.SETTINGS_ROUNDED,
+                icon=ft.Icons.SETTINGS_OUTLINED,
+                selected_icon=ft.Icons.SETTINGS_ROUNDED,
                 label="Cài đặt"
             ),
         ],

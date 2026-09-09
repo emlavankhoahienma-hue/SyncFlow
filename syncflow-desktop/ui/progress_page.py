@@ -17,8 +17,8 @@ class ProgressPage(ft.Container):
                     height=32,
                     border_radius=DSRadius.ICON_BLOCK,
                     bgcolor=DSColor.SURFACE_HIGH,
-                    alignment=ft.alignment.center,
-                    content=ft.Icon(ft.icons.TIMELAPSE_ROUNDED, color=DSColor.PRIMARY, size=18),
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Icon(ft.Icons.TIMELAPSE_ROUNDED, color=DSColor.PRIMARY, size=18),
                 ),
                 ft.Text("Tiến độ truyền tải", size=24, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_PRIMARY),
             ]
@@ -26,7 +26,7 @@ class ProgressPage(ft.Container):
 
         self.transfers_container = ft.Column(spacing=DSSpacing.LG)
         self.empty_label = ft.Container(
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
             padding=DSSpacing.XXXL,
             content=ft.Text("Không có tác vụ nào đang truyền", size=14, color=DSColor.TEXT_MUTED)
         )

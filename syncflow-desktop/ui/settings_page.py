@@ -23,8 +23,8 @@ class SettingsPage(ft.Container):
                     height=32,
                     border_radius=DSRadius.ICON_BLOCK,
                     bgcolor=DSColor.SURFACE_HIGH,
-                    alignment=ft.alignment.center,
-                    content=ft.Icon(ft.icons.SETTINGS_ROUNDED, color=DSColor.PRIMARY, size=18),
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Icon(ft.Icons.SETTINGS_ROUNDED, color=DSColor.PRIMARY, size=18),
                 ),
                 ft.Text("Cài đặt & Kết nối", size=24, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_PRIMARY),
             ]
@@ -34,17 +34,17 @@ class SettingsPage(ft.Container):
         qr_image_base64 = self.generate_qr(self.server_url)
 
         qr_control = ft.Image(
-            src_base64=qr_image_base64,
+            src=f"data:image/png;base64,{qr_image_base64}",
             width=180,
             height=180,
-            fit=ft.ImageFit.CONTAIN,
-            border_radius=ft.border_radius.all(DSRadius.CARD),
+            fit=ft.BoxFit.CONTAIN,
+            border_radius=ft.BorderRadius.all(DSRadius.CARD),
         ) if qr_image_base64 else ft.Container(
             width=180,
             height=180,
             bgcolor=DSColor.SURFACE_HIGH,
             border_radius=DSRadius.CARD,
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
             content=ft.Text("QR Unavailable", color=DSColor.TEXT_MUTED)
         )
 
@@ -137,7 +137,7 @@ class SettingsPage(ft.Container):
                         ]
                     ),
                     ft.Container(
-                        padding=ft.padding.symmetric(horizontal=DSSpacing.MD, vertical=DSSpacing.XS),
+                        padding=ft.Padding.symmetric(horizontal=DSSpacing.MD, vertical=DSSpacing.XS),
                         border_radius=DSRadius.ICON_BLOCK,
                         bgcolor=DSColor.SURFACE_HIGH,
                         content=ft.Text("v1.0.0", size=12, font_family="monospace", color=DSColor.PRIMARY, weight=ft.FontWeight.BOLD)

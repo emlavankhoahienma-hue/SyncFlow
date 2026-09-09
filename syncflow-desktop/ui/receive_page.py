@@ -24,20 +24,20 @@ class ReceivePage(ft.Container):
                             height=32,
                             border_radius=DSRadius.ICON_BLOCK,
                             bgcolor=DSColor.SURFACE_HIGH,
-                            alignment=ft.alignment.center,
-                            content=ft.Icon(ft.icons.DOWNLOAD_ROUNDED, color=DSColor.PRIMARY, size=18),
+                            alignment=ft.Alignment(0, 0),
+                            content=ft.Icon(ft.Icons.DOWNLOAD_ROUNDED, color=DSColor.PRIMARY, size=18),
                         ),
                         ft.Text("File nhận từ iPhone", size=24, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_PRIMARY),
                     ]
                 ),
                 ft.ElevatedButton(
                     "Mở thư mục nhận",
-                    icon=ft.icons.FOLDER_ROUNDED,
+                    icon=ft.Icons.FOLDER_ROUNDED,
                     style=ft.ButtonStyle(
                         bgcolor=DSColor.PRIMARY,
-                        color=ft.colors.WHITE,
+                        color=ft.Colors.WHITE,
                         shape=ft.RoundedRectangleBorder(radius=DSRadius.BUTTON),
-                        padding=ft.padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.MD),
+                        padding=ft.Padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.MD),
                     ),
                     on_click=self.open_storage_folder,
                 )
@@ -48,7 +48,7 @@ class ReceivePage(ft.Container):
         file_items = []
         if not files:
             empty_state = ft.Container(
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment(0, 0),
                 padding=DSSpacing.XXXL,
                 content=ft.Column(
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -59,8 +59,8 @@ class ReceivePage(ft.Container):
                             height=64,
                             border_radius=16,
                             bgcolor=DSColor.SURFACE_HIGH,
-                            alignment=ft.alignment.center,
-                            content=ft.Icon(ft.icons.INBOX_ROUNDED, color=DSColor.TEXT_MUTED, size=32),
+                            alignment=ft.Alignment(0, 0),
+                            content=ft.Icon(ft.Icons.INBOX_ROUNDED, color=DSColor.TEXT_MUTED, size=32),
                         ),
                         ft.Text("Chưa có file nào được chuyển đến", size=16, color=DSColor.TEXT_MUTED, weight=ft.FontWeight.W_500),
                         ft.Text("Khi iPhone gửi file lên, chúng sẽ xuất hiện tại đây và lưu vào thư mục Downloads/SyncFlow", size=13, color=DSColor.TEXT_MUTED),
@@ -98,15 +98,15 @@ class ReceivePage(ft.Container):
         size_mb = p.stat().st_size / (1024 * 1024)
         ext = p.suffix.lower()
 
-        icon = ft.icons.INSERT_DRIVE_FILE_ROUNDED
+        icon = ft.Icons.INSERT_DRIVE_FILE_ROUNDED
         if ext in [".png", ".jpg", ".jpeg", ".heic", ".webp"]:
-            icon = ft.icons.IMAGE_ROUNDED
+            icon = ft.Icons.IMAGE_ROUNDED
         elif ext in [".mp4", ".mov", ".mkv", ".avi"]:
-            icon = ft.icons.VIDEOCAM_ROUNDED
+            icon = ft.Icons.VIDEOCAM_ROUNDED
         elif ext in [".mp3", ".wav", ".m4a", ".flac"]:
-            icon = ft.icons.AUDIO_FILE_ROUNDED
+            icon = ft.Icons.AUDIO_FILE_ROUNDED
         elif ext in [".zip", ".tar", ".gz", ".rar", ".7z"]:
-            icon = ft.icons.FOLDER_ZIP_ROUNDED
+            icon = ft.Icons.FOLDER_ZIP_ROUNDED
 
         return ft.Container(
             border_radius=DSRadius.CARD,
@@ -123,7 +123,7 @@ class ReceivePage(ft.Container):
                                 height=32,
                                 border_radius=DSRadius.ICON_BLOCK,
                                 bgcolor=DSColor.SURFACE_HIGH,
-                                alignment=ft.alignment.center,
+                                alignment=ft.Alignment(0, 0),
                                 content=ft.Icon(icon, color=DSColor.PRIMARY, size=16),
                             ),
                             ft.Column(
@@ -136,7 +136,7 @@ class ReceivePage(ft.Container):
                         ]
                     ),
                     ft.IconButton(
-                        icon=ft.icons.OPEN_IN_NEW_ROUNDED,
+                        icon=ft.Icons.OPEN_IN_NEW_ROUNDED,
                         icon_color=DSColor.PRIMARY,
                         tooltip="Mở file",
                         on_click=lambda _, path=p: self.open_file(path)

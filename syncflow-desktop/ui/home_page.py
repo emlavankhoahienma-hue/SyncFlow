@@ -22,8 +22,8 @@ class HomePage(ft.Container):
                             height=32,
                             border_radius=DSRadius.ICON_BLOCK,
                             bgcolor=DSColor.SURFACE_HIGH,
-                            alignment=ft.alignment.center,
-                            content=ft.Icon(ft.icons.SYNC_ROUNDED, color=DSColor.PRIMARY, size=18),
+                            alignment=ft.Alignment(0, 0),
+                            content=ft.Icon(ft.Icons.SYNC_ROUNDED, color=DSColor.PRIMARY, size=18),
                         ),
                         ft.Text(
                             "SyncFlow Desktop",
@@ -34,7 +34,7 @@ class HomePage(ft.Container):
                     ]
                 ),
                 ft.Container(
-                    padding=ft.padding.symmetric(horizontal=DSSpacing.MD, vertical=DSSpacing.XS),
+                    padding=ft.Padding.symmetric(horizontal=DSSpacing.MD, vertical=DSSpacing.XS),
                     border_radius=12,
                     bgcolor=DSColor.SURFACE_HIGH,
                     content=ft.Row(
@@ -100,25 +100,25 @@ class HomePage(ft.Container):
 
         # Action Buttons (PrimaryButton: Radius 10, Primary Color)
         btn_send = ft.ElevatedButton(
-            text="Gửi file tới iPhone",
-            icon=ft.icons.UPLOAD_FILE_ROUNDED,
+            "Gửi file tới iPhone",
+            icon=ft.Icons.UPLOAD_FILE_ROUNDED,
             style=ft.ButtonStyle(
-                color=ft.colors.WHITE,
+                color=ft.Colors.WHITE,
                 bgcolor=DSColor.PRIMARY,
                 shape=ft.RoundedRectangleBorder(radius=DSRadius.BUTTON),
-                padding=ft.padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.MD),
+                padding=ft.Padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.MD),
             ),
             on_click=lambda _: self.on_navigate(1),
         )
 
         btn_receive = ft.OutlinedButton(
-            text="Xem thư mục nhận",
-            icon=ft.icons.FOLDER_OPEN_ROUNDED,
+            "Xem thư mục nhận",
+            icon=ft.Icons.FOLDER_OPEN_ROUNDED,
             style=ft.ButtonStyle(
                 color=DSColor.TEXT_PRIMARY,
                 shape=ft.RoundedRectangleBorder(radius=DSRadius.BUTTON),
-                padding=ft.padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.MD),
-                side=ft.BorderSide(0.5, DSColor.PRIMARY),
+                padding=ft.Padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.MD),
+                side=ft.BorderSide(width=0.5, color=DSColor.PRIMARY),
             ),
             on_click=lambda _: self.on_navigate(2),
         )
@@ -140,8 +140,8 @@ class HomePage(ft.Container):
                     content=ft.Column(
                         spacing=DSSpacing.MD,
                         controls=[
-                            self._build_recent_row("IMG_0241.png", "12.4 MB", "Đã nhận", ft.icons.IMAGE_ROUNDED),
-                            self._build_recent_row("Video_Demo.mp4", "184.2 MB", "Đã nhận", ft.icons.VIDEOCAM_ROUNDED),
+                            self._build_recent_row("IMG_0241.png", "12.4 MB", "Đã nhận", ft.Icons.IMAGE_ROUNDED),
+                            self._build_recent_row("Video_Demo.mp4", "184.2 MB", "Đã nhận", ft.Icons.VIDEOCAM_ROUNDED),
                         ]
                     )
                 )
@@ -166,7 +166,7 @@ class HomePage(ft.Container):
                             height=32,
                             border_radius=DSRadius.ICON_BLOCK,
                             bgcolor=DSColor.SURFACE_HIGH,
-                            alignment=ft.alignment.center,
+                            alignment=ft.Alignment(0, 0),
                             content=ft.Icon(icon_name, color=DSColor.PRIMARY, size=16),
                         ),
                         ft.Column(
@@ -179,7 +179,7 @@ class HomePage(ft.Container):
                     ]
                 ),
                 ft.Container(
-                    padding=ft.padding.symmetric(horizontal=DSSpacing.SM, vertical=DSSpacing.XS),
+                    padding=ft.Padding.symmetric(horizontal=DSSpacing.SM, vertical=DSSpacing.XS),
                     border_radius=DSRadius.ICON_BLOCK,
                     bgcolor=DSColor.SURFACE_HIGH,
                     content=ft.Text(status, size=11, color=DSColor.SUCCESS, weight=ft.FontWeight.W_500)
