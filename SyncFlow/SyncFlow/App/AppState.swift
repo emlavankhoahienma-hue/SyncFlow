@@ -1,0 +1,80 @@
+import SwiftUI
+import Combine
+
+enum ConnectionState {
+    case disconnected
+    case connecting
+    case connected(serverName: String)
+}
+
+@MainActor
+class AppState: ObservableObject {
+    @Published var serverIP: String = "192.168.1.100" {
+        didSet {
+            UserDefaults.standard.set(serverIP, forKey: "syncflow_server_ip")
+        }
+    }
+    @Published var serverPort: Int = 8765
+    @Published var connectionState: ConnectionState = .disconnected
+    @Published var autoDiscoverEnabled: Bool = true
+    @Published var autoConvertEnabled: Bool = true
+
+    let transferManager = TransferManager()
+    let discoveryService = DiscoveryService()
+    let syncWebSocket = SyncWebSocket()
+
+    private var cancellables = Set<AnyCancellable>()
+
+    var serverBaseURL: URL? {
+        let cleaned = serverIP.trimmingCharacters(in: .whitespacesAndNewlines)
+        return URL(string: "http://\(cleaned):\(serverPort)")
+    }
+
+    var isConnected: Bool {
+        if case .connected = connectionState { return true }
+        return false
+    }
+
+    init() {
+        if let savedIP = UserDefaults.standard.string(forKey: "syncflow_server_ip"), !savedIP.isEmpty {
+            self.serverIP = savedIP
+        }
+
+        // Hook Bonjour discovery results
+        discoveryService.$discoveredServers
+            .sink { [weak self] servers in
+                guard let self = self, self.autoDiscoverEnabled else { return }
+                if let firstServer = servers.first, !self.isConnected {
+                    self.serverIP = firstServer.ipAddress
+                    self.serverPort = firstServer.port
+                    Task {
+                        await self.connect()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
+        // Start discovery if enabled
+        if autoDiscoverEnabled {
+            discoveryService.startDiscovery()
+        }
+    }
+
+    func connect() async {
+        guard let url = serverBaseURL else { return }
+        connectionState = .connecting
+
+        do {
+            let (deviceName, _) = try await APIClient.shared.checkHealth(serverURL: url)
+            connectionState = .connected(serverName: deviceName)
+            syncWebSocket.connect(to: url)
+        } catch {
+            connectionState = .disconnected
+        }
+    }
+
+    func disconnect() {
+        syncWebSocket.disconnect()
+        connectionState = .disconnected
+    }
+}
