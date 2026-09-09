@@ -9,9 +9,6 @@ class SendPage(ft.Container):
         super().__init__(expand=True)
         self.main_page = page
         self.selected_files = []
-        self.file_picker = ft.FilePicker()
-        if hasattr(self.main_page, "overlay") and self.main_page.overlay is not None:
-            self.main_page.overlay.append(self.file_picker)
         self.content = self.build_ui()
 
     def build_ui(self):
@@ -94,14 +91,26 @@ class SendPage(ft.Container):
         )
 
     def trigger_pick_files(self, _):
-        files = self.file_picker.pick_files(allow_multiple=True)
-        if files:
-            self.on_files_selected(files)
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            paths = filedialog.askopenfilenames(
+                title="Chọn file để gửi tới iPhone",
+                filetypes=[("All Files (*.*)", "*.*")]
+            )
+            root.destroy()
+            if paths:
+                self.on_files_selected(list(paths))
+        except Exception as e:
+            pass
 
-    def on_files_selected(self, files):
-        if not files:
+    def on_files_selected(self, paths):
+        if not paths:
             return
-        self.selected_files = [f.path for f in files if getattr(f, "path", None)]
+        self.selected_files = [str(p) for p in paths]
         self.queue_list.controls.clear()
 
         for p_str in self.selected_files:
