@@ -59,6 +59,11 @@ class HomePage(ft.Container):
             ]
         )
 
+        self.active_status_label = ft.Text("Đang sẵn sàng", size=12, color=DSColor.PRIMARY, font_family="monospace")
+        self.active_ring = ft.ProgressRing(width=48, height=48, stroke_width=5, value=0.0, color=DSColor.PRIMARY, bgcolor=DSColor.SURFACE_HIGH)
+        self.active_title = ft.Text("Chưa có tác vụ nào", size=16, weight=ft.FontWeight.W_600, color=DSColor.TEXT_PRIMARY)
+        self.active_subtitle = ft.Text("0 MB / 0 MB • 0.0 MB/s", size=13, font_family="monospace", color=DSColor.TEXT_MUTED)
+
         # TransferCard (The ONLY component with shadow allowed by Design System)
         self.active_card = ft.Container(
             border_radius=DSRadius.CARD,
@@ -77,19 +82,19 @@ class HomePage(ft.Container):
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         controls=[
                             ft.Text("TRUYỀN TẢI HIỆN TẠI", size=12, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_MUTED),
-                            ft.Text("Đang sẵn sàng", size=12, color=DSColor.PRIMARY, font_family="monospace"),
+                            self.active_status_label,
                         ]
                     ),
                     ft.Row(
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         spacing=DSSpacing.LG,
                         controls=[
-                            ft.ProgressRing(width=48, height=48, stroke_width=5, value=0.0, color=DSColor.PRIMARY, bgcolor=DSColor.SURFACE_HIGH),
+                            self.active_ring,
                             ft.Column(
                                 spacing=DSSpacing.XS,
                                 controls=[
-                                    ft.Text("Chưa có tác vụ nào", size=16, weight=ft.FontWeight.W_600, color=DSColor.TEXT_PRIMARY),
-                                    ft.Text("0 MB / 0 MB • 0.0 MB/s", size=13, font_family="monospace", color=DSColor.TEXT_MUTED),
+                                    self.active_title,
+                                    self.active_subtitle,
                                 ]
                             )
                         ]
@@ -186,3 +191,20 @@ class HomePage(ft.Container):
                 )
             ]
         )
+
+    def update_transfer(self, name: str, percent: float, sent_mb: float, total_mb: float, speed_mb: float, eta_s: float):
+        self.active_status_label.value = "Đang truyền tải"
+        self.active_status_label.color = DSColor.PRIMARY
+        self.active_ring.value = percent
+        self.active_title.value = name
+        self.active_subtitle.value = f"{sent_mb:.2f} MB / {total_mb:.2f} MB • {speed_mb:.2f} MB/s (ETA: {int(eta_s)}s)"
+        self.main_page.update()
+
+    def mark_completed(self, name: str):
+        self.active_status_label.value = "Hoàn tất"
+        self.active_status_label.color = DSColor.SUCCESS
+        self.active_ring.value = 1.0
+        self.active_ring.color = DSColor.SUCCESS
+        self.active_title.value = name
+        self.active_subtitle.value = "Đã hoàn tất truyền tải"
+        self.main_page.update()

@@ -41,6 +41,8 @@
     </dict>
 
     <!-- Document Browser & Share Sheet Support -->
+    <key>UIFileSharingEnabled</key>
+    <true/>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
     <key>UISupportsDocumentBrowser</key>

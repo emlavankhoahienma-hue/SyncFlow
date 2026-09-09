@@ -37,3 +37,6 @@ Payload/
 # IDE
 .idea/
 .vscode/
+
+# Binaries
+*.exe

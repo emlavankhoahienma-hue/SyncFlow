@@ -6,6 +6,15 @@ from fastapi import WebSocket, WebSocketDisconnect
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
+        self.local_listeners = []
+
+    def add_listener(self, callback):
+        if callback not in self.local_listeners:
+            self.local_listeners.append(callback)
+
+    def remove_listener(self, callback):
+        if callback in self.local_listeners:
+            self.local_listeners.remove(callback)
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -15,6 +24,13 @@ class ConnectionManager:
         self.active_connections.discard(websocket)
 
     async def broadcast_json(self, data: dict):
+        # Notify local in-process listeners
+        for listener in list(self.local_listeners):
+            try:
+                listener(data)
+            except Exception:
+                pass
+
         disconnected = []
         for connection in list(self.active_connections):
             try:

@@ -34,6 +34,13 @@ struct AnyFilePicker: UIViewControllerRepresentable {
             parent.presentationMode.wrappedValue.dismiss()
 
             for sourceURL in urls {
+                let isAccessing = sourceURL.startAccessingSecurityScopedResource()
+                defer {
+                    if isAccessing {
+                        sourceURL.stopAccessingSecurityScopedResource()
+                    }
+                }
+
                 let tempDir = FileManager.default.temporaryDirectory
                 let uniqueName = "\(UUID().uuidString)_\(sourceURL.lastPathComponent)"
                 let destination = tempDir.appendingPathComponent(uniqueName)

@@ -8,6 +8,7 @@ import flet as ft
 import uvicorn
 
 from server.api import app as fastapi_app
+from server.ws import ws_manager
 from server.discovery import BonjourServer
 from ui.theme import DSColor, DSSpacing, DSRadius, get_app_theme
 from ui.home_page import HomePage
@@ -59,6 +60,56 @@ def main(page: ft.Page):
     settings_page = SettingsPage(page)
 
     pages = [home_page, send_page, receive_page, progress_page, settings_page]
+
+    # WebSocket Realtime Event Listener
+    def on_ws_event(event: dict):
+        event_type = event.get("type")
+        if event_type == "progress":
+            transfer_id = event.get("transfer_id", "")
+            sent = event.get("sent", 0)
+            total = event.get("total", 0)
+            speed = event.get("speed_bps", 0.0)
+            eta = event.get("eta_s", 0.0)
+
+            def _update():
+                progress_page.update_progress(transfer_id, sent, total, speed, eta)
+                percent = (sent / total) if total > 0 else 0.0
+                home_page.update_transfer(
+                    f"Tác vụ #{transfer_id[:6]}",
+                    percent,
+                    sent / (1024 * 1024),
+                    total / (1024 * 1024),
+                    speed / (1024 * 1024),
+                    eta
+                )
+
+            try:
+                if hasattr(page, "run_thread"):
+                    page.run_thread(_update)
+                else:
+                    _update()
+            except Exception:
+                pass
+
+        elif event_type == "done":
+            transfer_id = event.get("transfer_id", "")
+            path = event.get("path", "")
+
+            def _done():
+                progress_page.mark_done(transfer_id, path)
+                home_page.mark_completed(Path(path).name if path else "Tệp")
+                receive_page.content = receive_page.build_ui()
+                page.update()
+
+            try:
+                if hasattr(page, "run_thread"):
+                    page.run_thread(_done)
+                else:
+                    _done()
+            except Exception:
+                pass
+
+    ws_manager.add_listener(on_ws_event)
 
     content_area = ft.Container(
         expand=True,

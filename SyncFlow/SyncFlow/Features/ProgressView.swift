@@ -5,6 +5,8 @@ struct ProgressViewScreen: View {
     @EnvironmentObject var appState: AppState
 
     @State private var toastMessage: String?
+    @State private var previewItem: URLItem?
+    @State private var shareItem: URLItem?
 
     var body: some View {
         NavigationStack {
@@ -81,6 +83,12 @@ struct ProgressViewScreen: View {
                         .padding(.bottom, DS.Spacing.xxl.rawValue)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+            }
+            .sheet(item: $previewItem) { item in
+                QuickLookPreview(url: item.url)
+            }
+            .sheet(item: $shareItem) { item in
+                ShareSheet(activityItems: [item.url])
             }
         }
     }
@@ -199,41 +207,67 @@ struct ProgressViewScreen: View {
 
     private func completedTransferRow(item: TransferItem) -> some View {
         HStack(spacing: DS.Spacing.md.rawValue) {
-            ZStack {
-                RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 32, height: 32)
-                Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(item.status == .completed ? DS.Color.success : DS.Color.warning)
-            }
+            Button(action: {
+                if let url = item.fileURL {
+                    previewItem = URLItem(url: url)
+                }
+            }) {
+                HStack(spacing: DS.Spacing.md.rawValue) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 32, height: 32)
+                        Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(item.status == .completed ? DS.Color.success : DS.Color.warning)
+                    }
 
-            VStack(alignment: .leading, spacing: DS.Spacing.xs.rawValue) {
-                Text(item.name)
-                    .font(DS.Font.headline())
-                    .foregroundColor(DS.Color.textPrimary)
-                    .lineLimit(1)
+                    VStack(alignment: .leading, spacing: DS.Spacing.xs.rawValue) {
+                        Text(item.name)
+                            .font(DS.Font.headline())
+                            .foregroundColor(DS.Color.textPrimary)
+                            .lineLimit(1)
 
-                Text(item.direction == .upload ? "Đã gửi lên máy tính" : "Đã tải về Files")
-                    .font(DS.Font.body())
-                    .foregroundColor(DS.Color.textMuted)
+                        Text(item.direction == .upload ? "Đã gửi lên máy tính" : "Đã tải về Files • Chạm để xem")
+                            .font(DS.Font.body())
+                            .foregroundColor(DS.Color.textMuted)
+                    }
+                }
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
             if item.direction == .download && item.status == .completed, let url = item.fileURL {
-                if isMedia(ext: item.ext) {
+                HStack(spacing: DS.Spacing.xs.rawValue) {
+                    // Share button
                     Button(action: {
-                        saveToPhotos(url: url)
+                        shareItem = URLItem(url: url)
                     }) {
-                        Text("Lưu vào Ảnh")
-                            .font(DS.Font.mono(11))
-                            .fontWeight(.semibold)
-                            .foregroundColor(DS.Color.primary)
-                            .padding(.horizontal, DS.Spacing.sm.rawValue)
-                            .padding(.vertical, DS.Spacing.xs.rawValue)
-                            .background(DS.Color.surfaceHigh)
-                            .cornerRadius(DS.Radius.iconBlock.rawValue)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
+                                .fill(DS.Color.surfaceHigh)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(DS.Color.primary)
+                        }
+                    }
+
+                    // Save to Photos
+                    if isMedia(ext: item.ext) {
+                        Button(action: {
+                            saveToPhotos(url: url)
+                        }) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
+                                    .fill(DS.Color.surfaceHigh)
+                                    .frame(width: 32, height: 32)
+                                Image(systemName: "photo.badge.plus")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(DS.Color.success)
+                            }
+                        }
                     }
                 }
             }

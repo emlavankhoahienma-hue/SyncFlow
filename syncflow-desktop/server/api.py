@@ -1,5 +1,6 @@
 import socket
 import os
+import time
 import uuid
 import logging
 from pathlib import Path
@@ -198,7 +199,10 @@ async def download_file(file_id: str, request: Request):
 
         length = end - start + 1
 
-        def iter_range():
+        async def iter_range():
+            sent = start
+            last_t = time.time()
+            last_b = sent
             with open(file_path, "rb") as f:
                 f.seek(start)
                 bytes_left = length
@@ -208,7 +212,18 @@ async def download_file(file_id: str, request: Request):
                     if not data:
                         break
                     bytes_left -= len(data)
+                    sent += len(data)
+                    now = time.time()
+                    dt = now - last_t
+                    if dt >= 0.25:
+                        speed = (sent - last_b) / dt if dt > 0 else 0
+                        rem = max(0, file_size - sent)
+                        eta = rem / speed if speed > 0 else 0
+                        await ws_manager.send_progress(file_id, sent, file_size, speed, eta)
+                        last_t = now
+                        last_b = sent
                     yield data
+            await ws_manager.send_done(file_id, str(file_path))
 
         headers = {
             "Content-Range": f"bytes {start}-{end}/{file_size}",
@@ -220,10 +235,24 @@ async def download_file(file_id: str, request: Request):
         return StreamingResponse(iter_range(), status_code=206, headers=headers)
 
     # Full file stream
-    def iter_full():
+    async def iter_full():
+        sent = 0
+        last_t = time.time()
+        last_b = 0
         with open(file_path, "rb") as f:
             while chunk := f.read(CHUNK_SIZE):
+                sent += len(chunk)
+                now = time.time()
+                dt = now - last_t
+                if dt >= 0.25:
+                    speed = (sent - last_b) / dt if dt > 0 else 0
+                    rem = max(0, file_size - sent)
+                    eta = rem / speed if speed > 0 else 0
+                    await ws_manager.send_progress(file_id, sent, file_size, speed, eta)
+                    last_t = now
+                    last_b = sent
                 yield chunk
+        await ws_manager.send_done(file_id, str(file_path))
 
     headers = {
         "Accept-Ranges": "bytes",

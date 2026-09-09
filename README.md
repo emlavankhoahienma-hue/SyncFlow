@@ -1,74 +1,58 @@
-# SyncFlow — Hệ Sinh Thái Đồng Bộ File 2 Chiều iOS & Máy Tính
+# ⚡ SyncFlow — Hệ Sinh Thái Đồng Bộ File 2 Chiều iOS & Máy Tính
 
-Hệ thống đồng bộ ảnh, video và tệp tin tốc độ cao qua mạng nội bộ Wi-Fi (LAN) giữa **iPhone (SwiftUI, iOS 17+)** và **Máy tính (Python + Flet)**, được xây dựng theo chuẩn Design System **Terra Cotta** và hỗ trợ sideload (Sideloadly, TrollStore, AltStore).
-
----
-
-## 1. Kiến Trúc & Nguyên Tắc Hoạt Động
-
-```
-┌─────────────────┐         LAN (Wi-Fi)          ┌──────────────────────────┐
-│   iPhone App    │  ◄──── HTTP REST + WS ────►  │  Python Desktop (Flet)   │
-│  SwiftUI iOS17+ │   chunked upload/download    │  FastAPI server (:8765)  │
-│  Client thuần   │   SHA-256 verify, resume     │  + Bonjour mDNS + Flet UI│
-└─────────────────┘                              └──────────────────────────┘
-```
-
-- **Máy tính (Python) là Server duy nhất**: Khởi chạy FastAPI Server + WebSocket tại cổng `8765`, phát quảng bá Bonjour mDNS dịch vụ `_syncflow._tcp`.
-- **iPhone là Client thuần cho cả 2 chiều**:
-  - Gửi lên máy tính: iPhone upload từng chunk 1MB, tự động nối tiếp khi đứt đoạn (Resume offset).
-  - Tải về từ máy tính: iPhone download chunked có hỗ trợ HTTP Range, lưu vào thư mục `Documents` của Files app và có nút "Lưu vào Ảnh" trực tiếp cho ảnh/video.
-- **Bảo toàn chất lượng**:
-  - Tự động chuyển đổi HEIC → PNG (giữ nguyên độ phân giải và bit-depth màu).
-  - Tự động chuyển đổi video MOV/HEVC → MP4 chất lượng cao (CRF 18 visually lossless qua ffmpeg / AVAssetExportSession).
+> **Giải pháp truyền file LAN tốc độ cao, bảo toàn 100% chất lượng gốc, không thông qua bất kỳ máy chủ đám mây trung gian nào.**  
+> Thiết kế chuẩn Design System **Terra Cotta** (`#E2725B`), hỗ trợ xem trước tệp trực tiếp bằng **Apple QuickLook** và chia sẻ nhanh qua **iOS ShareSheet**.
 
 ---
 
-## 2. Cấu Trúc Thư Mục
-
-```
-syncflow/
-├── SyncFlow/                             # Ứng dụng iOS SwiftUI (iOS 17+)
-│   ├── SyncFlow.xcodeproj/               # Xcode Project cấu hình sẵn
-│   ├── SyncFlow/
-│   │   ├── App/
-│   │   │   ├── SyncFlowApp.swift          # Entrypoint @main
-│   │   │   └── AppState.swift             # Quản lý trạng thái kết nối & dịch vụ
-│   │   ├── DesignSystem/
-│   │   │   └── DesignSystem.swift         # Token màu #E2725B, Spacing 4, Font bo tròn
-│   │   ├── Components/
-│   │   │   ├── PrimaryButton.swift        # Nút bo góc 10px, spring scale + haptics
-│   │   │   ├── MaterialIconTextField.swift# Khung 32x32 material icon + viền 0.5px
-│   │   │   ├── TransferCard.swift         # Card to nhất, duy nhất có shadow mờ
-│   │   │   ├── FormatBadge.swift          # Badge định dạng chuyển đổi
-│   │   │   └── ProgressRingView.swift     # Vòng tiến độ 8px
-│   │   ├── Core/
-│   │   │   ├── Networking/                # REST APIClient, WebSocket, Bonjour Discovery
-│   │   │   ├── Transfer/                  # TransferManager (hàng đợi tối đa 2), ChunkUploader
-│   │   │   ├── Conversion/                # HEICConverter (ImageIO), HEVCConverter (AVAsset)
-│   │   │   └── Pickers/                   # PhotoVideoPicker (PHPicker), AnyFilePicker (UIDocumentPicker)
-│   │   ├── Features/                      # HomeView, SendView, ReceiveView, ProgressView, HistoryView, SettingsView
-│   │   ├── Resources/Assets.xcassets      # AppIcon, launchBackground #16181D
-│   │   └── Info.plist                     # Cấp quyền LAN, Bonjour, Photos, ATS Allow
-│   └── exportOptions.plist
-├── syncflow-desktop/                     # Ứng dụng Máy tính Python + Flet
-│   ├── main.py                            # Chạy song song FastAPI + Flet UI
-│   ├── requirements.txt
-│   ├── server/                            # api.py, ws.py, storage.py, models.py, discovery.py
-│   ├── convert/                           # heic.py (pillow-heif), hevc.py (ffmpeg CRF 18)
-│   └── ui/                                # Giao diện Flet khớp Design System Terra Cotta
-└── .github/workflows/
-    └── build.yml                          # CI/CD xuất file SyncFlow-unsigned.ipa
-```
+## 📑 Mục Lục
+1. [Kiến Trúc & Điểm Nổi Bật](#1-kiến-trúc--điểm-nổi-bật)
+2. [Cài Đặt & Chạy Trên Máy Tính (Windows / macOS / Linux)](#2-cài-đặt--chạy-trên-máy-tính)
+3. [Cài Đặt Ứng Dụng iPhone (Sideload IPA)](#3-cài-đặt-ứng-dụng-iphone-sideload-ipa)
+   - [Cách 1: Cài qua Sideloadly (Khuyên dùng - Miễn phí)](#cách-1-cài-qua-sideloadly)
+   - [Cách 2: Cài qua TrollStore (Dành cho máy có TrollStore)](#cách-2-cài-qua-trollstore)
+   - [Cách 3: Cài qua AltStore](#cách-3-cài-qua-altstore)
+4. [Hướng Dẫn Sử Dụng Chi Tiết](#4-hướng-dẫn-sử-dụng-chi-tiết)
+   - [Gửi file từ Máy tính sang iPhone](#41-gửi-file-từ-máy-tính-sang-iphone)
+   - [Xem trước file & Chia sẻ trên iPhone (QuickLook & ShareSheet)](#42-xem-trước-file--chia-sẻ-trên-iphone)
+   - [Gửi ảnh / video / tài liệu từ iPhone lên Máy tính](#43-gửi-từ-iphone-lên-máy-tính)
+   - [Tự động chuyển đổi định dạng (HEIC→PNG, MOV→MP4)](#44-tự-động-chuyển-đổi-định-dạng)
+5. [Xử Lý Sự Cố (Troubleshooting)](#5-xử-lý-sự-cố-troubleshooting)
 
 ---
 
-## 3. Hướng Dẫn Sử Dụng
+## 1. Kiến Trúc & Điểm Nổi Bật
 
-### 3.1 Chạy Ứng Dụng Desktop (Máy Tính)
+```
+┌────────────────────────────────┐                 MẠNG NỘI BỘ (WI-FI LAN)                 ┌────────────────────────────────┐
+│          iPhone (iOS)          │                                                         │       Máy Tính (Desktop)       │
+│  • SwiftUI (iOS 17.0+)         │  ◄──────────── HTTP REST + WebSocket (:8765) ────────►  │  • Python 3.10+ & Flet 0.86    │
+│  • Client thuần 2 chiều        │               Truyền chunk 1MB, Resume offset           │  • FastAPI Server + Zeroconf   │
+│  • Apple QuickLook + ShareSheet│               Xác thực mã băm SHA-256 an toàn           │  • UI Terra Cotta Dark Mode    │
+└────────────────────────────────┘                                                         └────────────────────────────────┘
+```
 
-1. Cài đặt Python 3.10+ (Đã thử nghiệm hoàn hảo trên Python 3.12).
-2. Cài đặt các thư viện phụ thuộc:
+* **Máy tính là Server duy nhất**: Chạy FastAPI + WebSocket tại cổng `8765`, phát quảng bá Bonjour mDNS dịch vụ `_syncflow._tcp`.
+* **iPhone là Client cho cả 2 chiều**:
+  - Gửi lên PC: Upload chunk 1MB, tự động nối tiếp khi mất sóng (Resume).
+  - Tải về từ PC: Download chunk có hỗ trợ `Range`, lưu vào thư mục `Documents` của app (hiển thị trực tiếp trong app Tệp/Files).
+* **Bảo toàn tuyệt đối chất lượng**:
+  - Tự động chuyển đổi HEIC → PNG (giữ nguyên độ sâu màu và độ phân giải).
+  - Tự động chuyển đổi MOV/HEVC → MP4 chất lượng chuẩn điện ảnh (`CRF 18`, `ffmpeg` / `AVAssetExportSession`).
+* **Không lưu trữ đám mây**: Toàn bộ dữ liệu đi thẳng trực tiếp giữa 2 thiết bị trong mạng Wi-Fi nội bộ với tốc độ tối đa của router (thường đạt 30–80 MB/s).
+
+---
+
+## 2. Cài Đặt & Chạy Trên Máy Tính
+
+### 2.1 Chạy trực tiếp qua Shortcut hoặc Launcher
+* Nếu bạn đã có file `SyncFlow.exe` (hoặc shortcut trên Desktop):
+  - Nhấp đúp vào **SyncFlow** trên Desktop để mở ngay ứng dụng.
+  - Bạn có thể nhấp chuột phải vào icon ứng dụng dưới Taskbar và chọn **Pin to taskbar** để tiện mở lần sau.
+
+### 2.2 Chạy từ mã nguồn Python
+1. Đảm bảo máy tính đã cài đặt **Python 3.10 trở lên** (khuyên dùng Python 3.11 hoặc 3.12).
+2. Mở Command Prompt hoặc PowerShell tại thư mục dự án:
    ```bash
    cd syncflow-desktop
    pip install -r requirements.txt
@@ -77,33 +61,86 @@ syncflow/
    ```bash
    python main.py
    ```
-4. Ứng dụng Desktop sẽ mở giao diện Flet Dark Mode và tự động:
-   - Mở server FastAPI tại `http://0.0.0.0:8765`.
-   - Hiển thị địa chỉ IP nội bộ và mã QR trong mục **Cài đặt**.
-   - Mở dịch vụ tìm kiếm mDNS `_syncflow._tcp`.
-
-### 3.2 Cài Đặt và Chạy Ứng Dụng iOS (iPhone)
-
-#### Cách 1: Build file IPA Unsigned qua GitHub Actions
-- Đẩy source code lên GitHub repository của bạn.
-- Vào tab **Actions** → Chạy workflow **Build Unsigned IPA**.
-- Tải file `SyncFlow-unsigned.ipa` từ Artifacts về máy tính.
-- Sideload vào iPhone bằng **Sideloadly** (ký bằng Apple ID miễn phí), **TrollStore** hoặc **AltStore**.
-
-#### Cách 2: Mở trực tiếp trên Xcode (macOS)
-- Mở file `SyncFlow/SyncFlow.xcodeproj` trong Xcode 15+.
-- Chọn team Signing của bạn trong `Signing & Capabilities`.
-- Chọn thiết bị iPhone và nhấn **Run** (Cmd + R).
+4. Ứng dụng Desktop sẽ tự khởi động:
+   - Giao diện Flet chuẩn Terra Cotta mở lên.
+   - Server FastAPI bắt đầu lắng nghe tại cổng `8765`.
+   - Bonjour Service tự động phát quảng bá để iPhone nhận diện trong mạng Wi-Fi.
 
 ---
 
-## 4. Kiểm Tra Danh Mục Nghiệm Thu (Acceptance Checklist)
+## 3. Cài Đặt Ứng Dụng iPhone (Sideload IPA)
 
-- [x] **Design System**: `DesignSystem.swift` định nghĩa `DS` token độc quyền, cấm màu xanh dương/tím chủ đạo, cấm hardcode `Color.black/white`, màu nền `#16181D`, màu chính Terra Cotta `#E2725B`.
-- [x] **PrimaryButton**: Góc bo 10px, hiệu ứng nhấn spring scale 0.95, rung haptic `.medium`.
-- [x] **TextField**: Icon nằm trong khung material 32×32 bo góc 8px ở bên trái, viền mảnh 0.5px.
-- [x] **Shadow**: Duy nhất `TransferCard` có shadow với opacity <= 0.25.
-- [x] **Pickers**: `PHPicker` dùng filter `.any(of: [.images, .videos])`, `UIDocumentPicker` dùng `[.data, .content]`, hỗ trợ hàng nghìn định dạng file không hardcode đuôi.
-- [x] **Giao thức mạng**: Chunk 1MB chuẩn, kiểm tra hash SHA-256 stream, hỗ trợ resume qua offset, WebSocket cập nhật tiến độ mỗi 250ms.
-- [x] **Chuyển đổi**: HEIC→PNG qua ImageIO/pillow-heif, HEVC/MOV→MP4 qua AVAssetExportSession/ffmpeg CRF 18 giữ tối đa độ nét.
-- [x] **CI/CD**: Workflow GitHub Actions xuất file `.ipa` unsigned không đòi hỏi Apple Developer Certificate trả phí.
+File cài đặt iOS là file **`SyncFlow-unsigned.ipa`**. Bạn có thể tải file này từ mục **[Releases](https://github.com/emlavankhoahienma-hue/SyncFlow/releases)** trên GitHub hoặc file tạo từ GitHub Actions.
+
+### Cách 1: Cài qua Sideloadly (Khuyên dùng - Miễn phí)
+1. Tải phần mềm **[Sideloadly](https://sideloadly.io/)** (miễn phí cho Windows và Mac).
+2. Kết nối iPhone với máy tính bằng cáp Lightning / Type-C (chọn **Tin cậy máy tính này / Trust This Computer** trên iPhone nếu được hỏi).
+3. Mở Sideloadly:
+   - Mục **iDevice**: Chọn thiết bị iPhone của bạn.
+   - Kéo tệp `SyncFlow-unsigned.ipa` thả vào ô vuông IPA lớn trên Sideloadly.
+   - Mục **Apple ID**: Nhập email tài khoản Apple ID cá nhân của bạn.
+   - Nhấn nút **Start**. Nhập mật khẩu Apple ID khi được yêu cầu (và mã xác thực 2 lớp gửi về điện thoại).
+4. Khi Sideloadly báo **Done**:
+   - Trên iPhone, vào **Cài đặt (Settings) > Cài đặt chung (General) > Quản lý VPN & Thiết bị (VPN & Device Management)**.
+   - Nhấp vào tài khoản Apple ID của bạn và bấm **Tin cậy (Trust)**.
+   - Bật **Chế độ nhà phát triển (Developer Mode)** tại **Cài đặt > Quyền riêng tư & Bảo mật > Chế độ nhà phát triển** (nếu dùng iOS 16+).
+
+### Cách 2: Cài qua TrollStore (Dành cho máy có TrollStore)
+- Mở file `SyncFlow-unsigned.ipa` bằng ứng dụng **TrollStore** trên iPhone.
+- Chọn **Install**. Ứng dụng sẽ được cài đặt vĩnh viễn, không bao giờ bị hết hạn 7 ngày.
+
+### Cách 3: Cài qua AltStore
+- Mở ứng dụng AltStore trên iPhone, chuyển qua tab **My Apps**, nhấn dấu **+** ở góc trên và chọn file `SyncFlow-unsigned.ipa`.
+
+---
+
+## 4. Hướng Dẫn Sử Dụng Chi Tiết
+
+### 4.1 Gửi file từ Máy tính sang iPhone
+1. Trên máy tính, mở SyncFlow và chuyển sang tab **Gửi**.
+2. Nhấn nút **Chọn file để gửi** (hoặc kéo thả tệp vào khung chứa). Hỗ trợ mọi loại tệp: ảnh, video, tài liệu PDF, zip,...
+3. Nhấn **Đưa vào hàng đợi sẵn sàng cho iPhone tải**:
+   - Nút sẽ có vòng quay loading báo hiệu đang chuẩn bị file.
+   - Thông báo thành công sẽ xuất hiện cùng danh sách các tệp đang sẵn sàng chia sẻ trong mục `SendQueue`.
+4. Trên iPhone:
+   - Mở ứng dụng SyncFlow, vào tab **Nhận**.
+   - Bạn sẽ thấy ngay danh sách các tệp trên máy tính. Nhấn nút **Tải**.
+   - Tệp sẽ được tải trực tiếp về iPhone mà không bị gián đoạn hay nhảy màn hình.
+
+### 4.2 Xem trước file & Chia sẻ trên iPhone
+Sau khi tải file về iPhone, bạn có toàn quyền kiểm soát tệp ngay trong tab **Nhận**:
+* **Xem trước tức thì (Apple QuickLook)**: Chạm trực tiếp vào bất kỳ tệp nào để mở trình xem toàn màn hình (xem ảnh chất lượng cao, phát video 4K, đọc PDF, xem văn bản).
+* **Chia sẻ nhanh (ShareSheet)**: Bấm vào icon chia sẻ ↗️ (`square.and.arrow.up`) trên dòng tệp để gửi ngay qua **AirDrop**, **Zalo**, **Messenger**, **Telegram**, hoặc chọn **Lưu vào Tệp (Files)**.
+* **Lưu vào Thư viện Ảnh (Photos)**: Đối với tệp hình ảnh và video, bấm nút icon ảnh 🖼️ để lưu thẳng vào Album Ảnh của iPhone.
+* **Mở trong ứng dụng Tệp của iOS**: Mở ứng dụng **Tệp (Files)** trên iPhone > mục **Trên iPhone của tôi (On My iPhone)** > thư mục **SyncFlow** để quản lý các tệp đã tải về.
+
+### 4.3 Gửi từ iPhone lên Máy tính
+1. Trên iPhone, mở tab **Gửi**.
+2. Chọn giữa 2 chế độ:
+   - **Ảnh & Video**: Mở thư viện chọn hàng loạt ảnh/video gốc.
+   - **Mọi loại file**: Mở trình duyệt tệp iOS để chọn tài liệu, file nén, nhạc,...
+3. Bật tùy chọn **Tự động chuyển đổi định dạng** nếu muốn đổi ảnh HEIC sang PNG hoặc video MOV sang MP4.
+4. Bấm **Bắt đầu gửi lên máy tính**. Tiến độ truyền tải và tốc độ MB/s sẽ hiển thị trực tiếp theo thời gian thực trên cả điện thoại và máy tính.
+5. Trên máy tính, tệp nhận được sẽ tự động lưu vào thư mục `Downloads/SyncFlow`.
+
+### 4.4 Tự Động Chuyển Đổi Định Dạng
+| Định dạng gốc | Định dạng chuyển đổi | Chất lượng | Cơ chế xử lý |
+|---|---|---|---|
+| **HEIC / HEIF** | **PNG** | Giữ nguyên độ phân giải & độ sâu màu | `ImageIO` (iOS) / `pillow-heif` (PC) |
+| **MOV (HEVC)** | **MP4** | Chuẩn hình ảnh sắc nét, CRF 18 visually lossless | `AVAssetExportSession` (iOS) / `ffmpeg` (PC) |
+
+---
+
+## 5. Xử Lý Sự Cố (Troubleshooting)
+
+### ❓ iPhone báo "Chưa kết nối với máy tính"
+1. **Chung mạng Wi-Fi**: Đảm bảo cả iPhone và máy tính đang kết nối vào **cùng một mạng Wi-Fi**.
+2. **Tắt cách ly AP (AP Isolation)**: Một số router Wi-Fi công cộng (quán cà phê) chặn các thiết bị giao tiếp với nhau. Hãy dùng mạng gia đình hoặc phát Wi-Fi Hotspot từ điện thoại/máy tính.
+3. **Cấp quyền Mạng cục bộ trên iPhone**: Vào **Cài đặt iPhone > SyncFlow > bật Mạng cục bộ (Local Network)**.
+4. **Tường lửa Windows (Windows Firewall)**:
+   - Mở *Windows Defender Firewall*, cho phép Python hoặc cổng `8765` nhận kết nối trong Private Network.
+   - Nếu Bonjour không tự tìm thấy, mở tab **Cài đặt** trên iPhone và nhập thủ công địa chỉ IP hiển thị trên màn hình máy tính (ví dụ: `192.168.1.5`).
+
+### ❓ Sideloadly báo lỗi khi cài IPA
+- Đảm bảo bạn đã cài đặt **iTunes** và **iCloud** bản chính thức từ Apple (không dùng bản tải từ Microsoft Store).
+- Đăng nhập đúng Apple ID và nhập đúng mã xác thực 2 bước.
