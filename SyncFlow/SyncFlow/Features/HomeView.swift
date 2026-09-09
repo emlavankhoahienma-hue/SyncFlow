@@ -144,6 +144,7 @@ struct HomeView: View {
                         } else {
                             VStack(spacing: DS.Spacing.sm.rawValue) {
                                 ForEach(appState.transferManager.completedTransfers.prefix(5)) { item in
+                                    HStack(spacing: DS.Spacing.md.rawValue) {
                                         Button(action: {
                                             if let url = item.fileURL {
                                                 previewItem = URLItem(url: url)
