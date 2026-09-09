@@ -46,12 +46,7 @@ class HEICConverter {
                 }
 
                 // Copy all properties to preserve color profile, orientation, etc.
-                let options: [CFString: Any] = [
-                    kCGImageDestinationLossless: true,
-                    kCGImageSourceShouldCache: false
-                ]
-
-                CGImageDestinationAddImageFromSource(destination, imageSource, 0, options as CFDictionary)
+                CGImageDestinationAddImageFromSource(destination, imageSource, 0, nil)
 
                 if CGImageDestinationFinalize(destination) {
                     continuation.resume(returning: tempOutputURL)

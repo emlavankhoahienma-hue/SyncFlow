@@ -2,9 +2,21 @@ import SwiftUI
 
 struct ProgressRingView: View {
     var progress: Double // 0.0 to 1.0
-    var lineWidth: CGFloat = 8
-    var size: CGFloat = 72
-    var showPercentText: Bool = true
+    var size: CGFloat
+    var lineWidth: CGFloat
+    var showPercentText: Bool
+
+    init(
+        progress: Double,
+        size: CGFloat = 72,
+        lineWidth: CGFloat = 8,
+        showPercentText: Bool = true
+    ) {
+        self.progress = progress
+        self.size = size
+        self.lineWidth = lineWidth
+        self.showPercentText = showPercentText
+    }
 
     var body: some View {
         ZStack {
