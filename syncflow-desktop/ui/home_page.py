@@ -260,7 +260,8 @@ class HomePage(ft.Container):
         def build_dialog_content():
             pin = crypto_manager.session_pin
             token = crypto_manager.pairing_token
-            server_url = f"http://{local_ip}:8765?pin={pin}&token={token}"
+            fingerprint = crypto_manager.get_server_fingerprint()
+            server_url = f"http://{local_ip}:8765?pin={pin}&token={token}&fp={fingerprint}"
             qr_b64 = self.generate_qr(server_url)
 
             return ft.Container(
@@ -294,8 +295,8 @@ class HomePage(ft.Container):
                                 ]
                             )
                         ),
-                        ft.Text(f"IP: {local_ip}  •  Port: 8765", size=14, weight=ft.FontWeight.BOLD, font_family="monospace", color=DSColor.TEXT_PRIMARY),
-                        ft.Text("Mã PIN & Token sinh ngẫu nhiên trên RAM máy tính. Hacker dù biết code trên GitHub cũng không thể xâm nhập nếu không thấy màn hình này!", size=11, text_align=ft.TextAlign.CENTER, color=DSColor.TEXT_MUTED),
+                        ft.Text(f"IP: {local_ip}  •  Port: 8765  •  FP: {fingerprint}", size=13, weight=ft.FontWeight.BOLD, font_family="monospace", color=DSColor.TEXT_PRIMARY),
+                        ft.Text("Mã PIN, Token & Khóa ECDH sinh ngẫu nhiên trên RAM. Chống MITM giả mạo & không lộ bất kỳ bí mật nào trên GitHub!", size=11, text_align=ft.TextAlign.CENTER, color=DSColor.TEXT_MUTED),
                     ]
                 )
             )

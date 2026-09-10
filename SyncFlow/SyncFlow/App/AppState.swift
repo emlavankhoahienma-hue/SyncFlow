@@ -25,6 +25,7 @@ class AppState: ObservableObject {
 
     @Published var pairingPIN: String = ""
     @Published var pairingToken: String? = nil
+    @Published var serverFingerprint: String? = nil
     @Published var lastConnectionError: String? = nil
 
     private var cancellables = Set<AnyCancellable>()
@@ -80,11 +81,12 @@ class AppState: ObservableObject {
         }
     }
 
-    func connect(toIP ip: String, port: Int = 8765, pin: String? = nil, token: String? = nil) async -> Bool {
+    func connect(toIP ip: String, port: Int = 8765, pin: String? = nil, token: String? = nil, fingerprint: String? = nil) async -> Bool {
         self.serverIP = ip.trimmingCharacters(in: .whitespacesAndNewlines)
         self.serverPort = port
         if let p = pin, !p.isEmpty { self.pairingPIN = p }
         if let t = token, !t.isEmpty { self.pairingToken = t }
+        if let fp = fingerprint, !fp.isEmpty { self.serverFingerprint = fp }
         await connect()
         return isConnected
     }
@@ -98,12 +100,13 @@ class AppState: ObservableObject {
             do {
                 let (deviceName, _) = try await APIClient.shared.checkHealth(serverURL: url)
                 
-                // Perform zero-secret E2EE handshake guarded by PIN / QR Token
+                // Perform zero-secret E2EE handshake guarded by PIN / QR Token & Fingerprint
                 do {
                     try await CryptoManager.shared.performHandshake(
                         serverURL: url,
                         pin: pairingPIN.isEmpty ? nil : pairingPIN,
-                        pairingToken: pairingToken
+                        pairingToken: pairingToken,
+                        expectedFingerprint: serverFingerprint
                     )
                 } catch {
                     print("E2EE Handshake error: \(error.localizedDescription)")

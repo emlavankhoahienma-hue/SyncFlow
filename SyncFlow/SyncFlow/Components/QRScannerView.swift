@@ -3,7 +3,7 @@ import AVFoundation
 
 struct QRScannerView: View {
     @Environment(\.dismiss) private var dismiss
-    var onCodeScanned: (String, Int, String?, String?) -> Void
+    var onCodeScanned: (String, Int, String?, String?, String?) -> Void
 
     @State private var isTorchOn = false
     @State private var errorMessage: String?
@@ -109,6 +109,7 @@ struct QRScannerView: View {
         var parsedPort: Int = 8765
         var parsedPIN: String?
         var parsedToken: String?
+        var parsedFP: String?
 
         // Case 1: URL format like http://192.168.1.15:8765?pin=... or syncflow://connect?ip=...
         if let url = URL(string: trimmed) {
@@ -124,6 +125,8 @@ struct QRScannerView: View {
                         parsedPIN = val
                     } else if q.name == "token", let val = q.value {
                         parsedToken = val
+                    } else if q.name == "fp" || q.name == "fingerprint", let val = q.value {
+                        parsedFP = val
                     }
                 }
             } else if let host = url.host {
@@ -138,13 +141,15 @@ struct QRScannerView: View {
                             parsedPIN = val
                         } else if q.name == "token", let val = q.value {
                             parsedToken = val
+                        } else if q.name == "fp" || q.name == "fingerprint", let val = q.value {
+                            parsedFP = val
                         }
                     }
                 }
             }
         }
 
-        // Case 2: JSON format {"ip":"192.168.1.15","port":8765,"pin":"482910","token":"..."}
+        // Case 2: JSON format {"ip":"192.168.1.15","port":8765,"pin":"482910","token":"...","fp":"..."}
         if parsedIP == nil, let data = trimmed.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let ip = json["ip"] as? String {
@@ -158,6 +163,9 @@ struct QRScannerView: View {
             }
             if let token = json["token"] as? String {
                 parsedToken = token
+            }
+            if let fp = json["fp"] as? String ?? json["fingerprint"] as? String {
+                parsedFP = fp
             }
         }
 
@@ -179,7 +187,7 @@ struct QRScannerView: View {
 
         if let ip = parsedIP, !ip.isEmpty {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            onCodeScanned(ip, parsedPort, parsedPIN, parsedToken)
+            onCodeScanned(ip, parsedPort, parsedPIN, parsedToken, parsedFP)
             dismiss()
         }
     }

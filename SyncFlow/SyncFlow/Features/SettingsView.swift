@@ -161,7 +161,7 @@ struct SettingsView: View {
                                 .font(DS.Font.body())
                                 .foregroundColor(DS.Color.textPrimary)
                             Spacer()
-                            Text("1.0.6")
+                            Text("1.0.7")
                                 .font(DS.Font.mono(13))
                                 .foregroundColor(DS.Color.textMuted)
                         }
@@ -191,12 +191,12 @@ struct SettingsView: View {
                 inputIP = appState.serverIP
             }
             .sheet(isPresented: $showingQRScanner) {
-                QRScannerView { scannedIP, scannedPort, scannedPIN, scannedToken in
+                QRScannerView { scannedIP, scannedPort, scannedPIN, scannedToken, scannedFP in
                     inputIP = scannedIP
                     Task {
                         isConnecting = true
                         connectionFeedback = "Đang kết nối đến \(scannedIP)..."
-                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort, pin: scannedPIN, token: scannedToken)
+                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort, pin: scannedPIN, token: scannedToken, fingerprint: scannedFP)
                         isConnecting = false
                         if ok {
                             connectionFeedback = "Kết nối thành công qua mã QR!"

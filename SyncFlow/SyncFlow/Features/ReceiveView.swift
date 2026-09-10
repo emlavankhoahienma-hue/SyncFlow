@@ -81,10 +81,10 @@ struct ReceiveView: View {
                 ShareSheet(activityItems: [item.url])
             }
             .sheet(isPresented: $showingQRScanner) {
-                QRScannerView { scannedIP, scannedPort, scannedPIN, scannedToken in
+                QRScannerView { scannedIP, scannedPort, scannedPIN, scannedToken, scannedFP in
                     Task {
                         showToast("Đang kết nối đến \(scannedIP)...")
-                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort, pin: scannedPIN, token: scannedToken)
+                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort, pin: scannedPIN, token: scannedToken, fingerprint: scannedFP)
                         if ok {
                             showToast("Đã kết nối với máy tính thành công!")
                             await loadFiles()

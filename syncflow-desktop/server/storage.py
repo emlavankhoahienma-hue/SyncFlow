@@ -2,12 +2,15 @@ import os
 import mimetypes
 import hashlib
 import time
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from .models import FileMeta
 from .security import sanitize_filename
 
 CHUNK_SIZE = 1024 * 1024  # 1MB constant as mandated
+MAX_CHUNK_SIZE = 2 * 1024 * 1024  # 2MB max per chunk (anti-memory exhaustion bomb)
+MAX_CONCURRENT_UPLOADS = 25  # Limit concurrent transfers to prevent resource starvation
 
 class StorageManager:
     def __init__(self, base_dir: Optional[str] = None):
@@ -31,6 +34,25 @@ class StorageManager:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.send_dir.mkdir(parents=True, exist_ok=True)
 
+    def cleanup_stale_transfers(self, max_age_seconds: int = 3600):
+        """Removes orphaned or abandoned .part files older than max_age_seconds (default 1h)."""
+        now = time.time()
+        try:
+            if self.temp_dir.exists():
+                for part in self.temp_dir.glob("*.part"):
+                    try:
+                        if now - part.stat().st_mtime > max_age_seconds:
+                            part.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+        except Exception:
+            pass
+
+        for tid in list(self.active_transfers.keys()):
+            info = self.active_transfers[tid]
+            if now - info.get("last_time", now) > max_age_seconds:
+                self.active_transfers.pop(tid, None)
+
     def set_storage_dir(self, new_dir: str):
         self.base_dir = Path(new_dir)
         self.temp_dir = self.base_dir / ".temp"
@@ -39,6 +61,22 @@ class StorageManager:
 
     def init_upload(self, transfer_id: str, meta: FileMeta) -> int:
         self.ensure_dirs()
+        self.cleanup_stale_transfers()
+
+        # Check concurrent transfers limit
+        if len(self.active_transfers) >= MAX_CONCURRENT_UPLOADS:
+            raise RuntimeError(f"Quá nhiều luồng truyền tải đồng thời (giới hạn {MAX_CONCURRENT_UPLOADS}).")
+
+        # Free disk space check: enforce 200MB buffer
+        try:
+            usage = shutil.disk_usage(self.base_dir)
+            if meta.size > (usage.free - 200 * 1024 * 1024):
+                raise OSError(f"Dung lượng ổ đĩa không đủ để lưu file {meta.name} ({meta.size / (1024*1024):.1f} MB)")
+        except (OSError, ValueError) as e:
+            if "không đủ" in str(e):
+                raise
+            pass
+
         temp_file = self.temp_dir / f"{transfer_id}.part"
         resume_offset = 0
 
@@ -61,6 +99,9 @@ class StorageManager:
         return resume_offset
 
     def write_chunk(self, transfer_id: str, chunk_data: bytes, chunk_index: int) -> Tuple[int, float, float]:
+        if len(chunk_data) > MAX_CHUNK_SIZE:
+            raise ValueError(f"Chunk size exceeds 2MB limit ({len(chunk_data)} bytes). Possible memory bomb.")
+
         if transfer_id not in self.active_transfers:
             raise KeyError(f"Upload {transfer_id} not initialized")
 

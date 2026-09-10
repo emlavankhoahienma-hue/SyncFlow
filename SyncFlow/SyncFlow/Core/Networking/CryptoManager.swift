@@ -35,7 +35,8 @@ public class CryptoManager {
     }
 
     /// Performs ECDH handshake guarded by PC screen PIN or QR Pairing Token.
-    public func performHandshake(serverURL: URL, pin: String? = nil, pairingToken: String? = nil) async throws {
+    /// If expectedFingerprint is supplied (from QR code), verifies server ephemeral public key to prevent rogue MITM servers.
+    public func performHandshake(serverURL: URL, pin: String? = nil, pairingToken: String? = nil, expectedFingerprint: String? = nil) async throws {
         let handshakeURL = serverURL.appendingPathComponent("auth/handshake")
         var request = URLRequest(url: handshakeURL)
         request.httpMethod = "POST"
@@ -77,6 +78,20 @@ public class CryptoManager {
               let serverKeyB64 = json["server_public_key"] as? String,
               let serverKeyData = Data(base64Encoded: serverKeyB64) else {
             throw NSError(domain: "CryptoManager", code: 500, userInfo: [NSLocalizedDescriptionKey: "Phản hồi handshake không hợp lệ"])
+        }
+
+        // Anti-MITM: Verify server public key fingerprint if provided by QR code
+        if let expFp = expectedFingerprint, !expFp.isEmpty {
+            let digest = SHA256.hash(data: serverKeyData)
+            let hex = digest.map { String(format: "%02x", $0) }.joined()
+            let computedFp = String(hex.prefix(8))
+            if computedFp.lowercased() != expFp.lowercased() {
+                throw NSError(
+                    domain: "CryptoManager",
+                    code: 403,
+                    userInfo: [NSLocalizedDescriptionKey: "Cảnh báo MITM / Rogue Server! Khóa công khai máy chủ (\(computedFp)) không khớp với mã QR (\(expFp))."]
+                )
+            }
         }
 
         self.sessionID = json["session_id"] as? String

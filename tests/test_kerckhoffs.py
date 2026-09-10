@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import time
 import base64
@@ -142,8 +142,75 @@ def run_tests():
     assert sanitize_filename("safe_file.png") == "safe_file.png"
     print(" -> All malicious paths successfully sanitized!")
 
+    # Test 10: Windows Reserved Device Names DOS protection
+    print("\n[TEST 10] Windows Reserved Device Names (CON, PRN, AUX, NUL, COM1, LPT1)...")
+    assert sanitize_filename("CON.txt") == "safe_CON.txt"
+    assert sanitize_filename("aux.png") == "safe_aux.png"
+    assert sanitize_filename("prn") == "safe_prn"
+    assert sanitize_filename("NUL.dat") == "safe_NUL.dat"
+    assert sanitize_filename("com1.zip") == "safe_com1.zip"
+    assert sanitize_filename("lpt9.log") == "safe_lpt9.log"
+    print(" -> Windows reserved device names safely prefixed with 'safe_' to avoid OS crash/hang!")
+
+    # Test 11: Low-order point injection attack on X25519 (RFC 7748)
+    print("\n[TEST 11] Low-order point injection attack on X25519 (RFC 7748 all-zeros)...")
+    zero_pub_b64 = base64.b64encode(b"\x00" * 32).decode("ascii")
+    try:
+        crypto_manager.verify_and_handshake(
+            client_ip="192.168.1.55",
+            client_public_key_b64=zero_pub_b64,
+            pin=crypto_manager.session_pin
+        )
+        assert False, "FAILED: Low-order point attack was accepted!"
+    except ValueError as e:
+        print(f" -> LOW-ORDER POINT REJECTED: {e}")
+
+    # Test 12: Chunk Bomb / Memory Exhaustion Defense (> 2MB limit)
+    print("\n[TEST 12] Chunk Bomb (> 2MB chunk memory exhaustion attack)...")
+    from server.storage import storage_manager
+    from server.models import FileMeta
+
+    test_meta = FileMeta(file_id="bomb_test", name="test_bomb.dat", ext="dat", mime="application/octet-stream", size=5000000)
+    storage_manager.init_upload("bomb_transfer", test_meta)
+    oversized_chunk = b"X" * (2 * 1024 * 1024 + 1024)  # 2MB + 1KB
+    try:
+        storage_manager.write_chunk("bomb_transfer", oversized_chunk, 0)
+        assert False, "FAILED: Chunk bomb was accepted!"
+    except ValueError as e:
+        print(f" -> CHUNK BOMB REJECTED: {e}")
+    finally:
+        storage_manager.active_transfers.pop("bomb_transfer", None)
+
+    # Test 13: Disk Space Exhaustion Quota check
+    print("\n[TEST 13] Disk Space Exhaustion protection (Requesting 1 Petabyte)...")
+    huge_meta = FileMeta(file_id="huge_test", name="huge.iso", ext="iso", mime="application/octet-stream", size=10**15)
+    try:
+        storage_manager.init_upload("huge_transfer", huge_meta)
+        assert False, "FAILED: Huge file was accepted despite insufficient disk space!"
+    except OSError as e:
+        print(f" -> DISK EXHAUSTION BLOCKED: {e}")
+
+    # Test 14: Server Ephemeral Public Key Fingerprint (Anti-MITM / Rogue Server)
+    print("\n[TEST 14] Server Ephemeral Public Key Fingerprint...")
+    import hashlib
+    fp = crypto_manager.get_server_fingerprint()
+    assert len(fp) == 8
+    expected_fp = hashlib.sha256(crypto_manager._public_bytes).hexdigest()[:8]
+    assert fp == expected_fp
+    print(f" -> Server Fingerprint: {fp} matches SHA256(server_pub_key)[:8] 100%!")
+
+    # Test 15: API Flood Protection (Max 180 req/min/IP)
+    print("\n[TEST 15] API Flood Protection (Rate Limiting 180 req/min)...")
+    flood_ip = "192.168.1.77"
+    for _ in range(180):
+        ok = crypto_manager.check_request_flood(flood_ip)
+        assert ok is True
+    # 181st request must be denied
+    assert crypto_manager.check_request_flood(flood_ip) is False
+    print(" -> 181st request within 1 minute BLOCKED by Anti-Flood filter!")
+
     print("\n==================================================")
-    print("✅ ALL KERCKHOFFS SECURITY TESTS PASSED PERFECTLY!")
+    print("✅ ALL 15 ADVANCED SECURITY TESTS PASSED PERFECTLY!")
     print("==================================================")
 
 if __name__ == "__main__":

@@ -27,10 +27,16 @@ LOCKOUT_WINDOW_SECONDS = 900  # 15 minutes lockout
 MAX_TIMESTAMP_SKEW_SECONDS = 60  # 60 seconds tolerance for anti-replay
 
 
+WINDOWS_RESERVED = {
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+}
+
 def sanitize_filename(filename: str, base_dir: Optional[Path] = None) -> str:
     """
     Sanitizes untrusted filenames to prevent Path Traversal attacks (e.g. ../../evil.exe),
-    null byte injections, and invalid filesystem characters.
+    null byte injections, Windows device names (CON, PRN, AUX, NUL), and invalid filesystem characters.
     Optionally verifies that the resulting path stays within base_dir.
     """
     if not filename:
@@ -51,6 +57,11 @@ def sanitize_filename(filename: str, base_dir: Optional[Path] = None) -> str:
     if not base:
         base = "unnamed_file"
 
+    # Block Windows reserved device names
+    stem = Path(base).stem.upper()
+    if stem in WINDOWS_RESERVED:
+        base = f"safe_{base}"
+
     if base_dir:
         resolved_base = base_dir.resolve()
         candidate = (base_dir / base).resolve()
@@ -59,6 +70,7 @@ def sanitize_filename(filename: str, base_dir: Optional[Path] = None) -> str:
             return "unnamed_file"
 
     return base
+
 
 
 class AuthSecurityManager:
@@ -112,6 +124,24 @@ class AuthSecurityManager:
 
     def get_server_public_key_b64(self) -> str:
         return base64.b64encode(self._public_bytes).decode("ascii")
+
+    def get_server_fingerprint(self) -> str:
+        """Returns 8-character hex fingerprint of the server ephemeral public key."""
+        import hashlib
+        return hashlib.sha256(self._public_bytes).hexdigest()[:8]
+
+    def check_request_flood(self, client_ip: str) -> bool:
+        """Anti-flood: enforces maximum 180 requests per 60 seconds per IP."""
+        now = time.time()
+        if not hasattr(self, "_req_timestamps"):
+            self._req_timestamps: Dict[str, list] = {}
+        history = self._req_timestamps.get(client_ip, [])
+        history = [t for t in history if now - t < 60]
+        if len(history) >= 180:
+            return False
+        history.append(now)
+        self._req_timestamps[client_ip] = history
+        return True
 
     def _clean_expired_data(self):
         now = time.time()
@@ -176,9 +206,9 @@ class AuthSecurityManager:
                 raise ValueError("Nonce gói tin bị trùng lặp (Anti-Replay Attack detected).")
             self._seen_nonces[nonce] = now
 
-        # 4. PIN / Pairing Token validation
-        is_pin_valid = pin is not None and pin.strip() == self.session_pin
-        is_token_valid = pairing_token is not None and pairing_token.strip() == self.pairing_token
+        # 4. PIN / Pairing Token validation (Constant-Time to prevent timing attacks)
+        is_pin_valid = pin is not None and secrets.compare_digest(pin.strip(), self.session_pin)
+        is_token_valid = pairing_token is not None and secrets.compare_digest(pairing_token.strip(), self.pairing_token)
 
         if not is_pin_valid and not is_token_valid:
             self.record_failed_attempt(client_ip)
@@ -196,6 +226,10 @@ class AuthSecurityManager:
 
         client_pub = x25519.X25519PublicKey.from_public_bytes(client_pub_bytes)
         shared_secret = self._private_key.exchange(client_pub)
+
+        # RFC 7748 Low-order point attack protection
+        if all(b == 0 for b in shared_secret):
+            raise ValueError("Low-order point cryptographic attack detected (RFC 7748).")
 
         # 6. HKDF-SHA256 Derivation
         hkdf = HKDF(
