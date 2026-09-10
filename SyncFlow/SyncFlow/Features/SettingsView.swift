@@ -6,17 +6,47 @@ struct SettingsView: View {
     @State private var inputIP: String = ""
     @State private var isConnecting = false
     @State private var connectionFeedback: String?
+    @State private var showingQRScanner = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.Spacing.xl.rawValue) {
-                    // Manual IP Connection Card
+                    // Manual IP & QR Connection Card
                     VStack(alignment: .leading, spacing: DS.Spacing.md.rawValue) {
                         Text("KẾT NỐI MÁY TÍNH")
                             .font(DS.Font.mono(12))
                             .fontWeight(.bold)
                             .foregroundColor(DS.Color.textMuted)
+
+                        Button(action: {
+                            showingQRScanner = true
+                        }) {
+                            HStack(spacing: DS.Spacing.sm.rawValue) {
+                                Image(systemName: "qrcode.viewfinder")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Text("Quét mã QR trên máy tính")
+                                    .font(DS.Font.headline())
+                            }
+                            .foregroundColor(Color.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(DS.Color.surfaceHigh)
+                            .cornerRadius(DS.Radius.button.rawValue)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DS.Radius.button.rawValue)
+                                    .stroke(DS.Color.primary.opacity(0.7), lineWidth: 1)
+                            )
+                        }
+
+                        HStack {
+                            VStack { Divider().background(DS.Color.border) }
+                            Text("HOẶC NHẬP IP")
+                                .font(DS.Font.mono(10))
+                                .foregroundColor(DS.Color.textMuted)
+                            VStack { Divider().background(DS.Color.border) }
+                        }
+                        .padding(.vertical, DS.Spacing.xs.rawValue)
 
                         MaterialIconTextField(
                             systemIcon: "network",
@@ -152,6 +182,22 @@ struct SettingsView: View {
             .navigationTitle("Cài đặt")
             .onAppear {
                 inputIP = appState.serverIP
+            }
+            .sheet(isPresented: $showingQRScanner) {
+                QRScannerView { scannedIP, scannedPort in
+                    inputIP = scannedIP
+                    Task {
+                        isConnecting = true
+                        connectionFeedback = "Đang kết nối đến \(scannedIP)..."
+                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort)
+                        isConnecting = false
+                        if ok {
+                            connectionFeedback = "Kết nối thành công qua mã QR!"
+                        } else {
+                            connectionFeedback = "Không thể kết nối đến \(scannedIP):\(scannedPort)"
+                        }
+                    }
+                }
             }
         }
     }

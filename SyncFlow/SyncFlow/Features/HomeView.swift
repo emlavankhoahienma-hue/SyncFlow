@@ -6,6 +6,7 @@ struct HomeView: View {
 
     @State private var previewItem: URLItem?
     @State private var shareItem: URLItem?
+    @State private var showingQRScanner = false
 
     var body: some View {
         NavigationStack {
@@ -25,27 +26,43 @@ struct HomeView: View {
 
                         Spacer()
 
-                        // Status Dot with pulse effect (iOS 17+)
                         HStack(spacing: DS.Spacing.xs.rawValue) {
-                            if #available(iOS 17.0, *) {
-                                Image(systemName: appState.isConnected ? "circle.fill" : "circle.dotted")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(appState.isConnected ? DS.Color.success : DS.Color.warning)
-                                    .symbolEffect(.pulse, isActive: true)
-                            } else {
-                                Circle()
-                                    .fill(appState.isConnected ? DS.Color.success : DS.Color.warning)
-                                    .frame(width: 10, height: 10)
+                            // QR Scanner quick button
+                            Button(action: {
+                                showingQRScanner = true
+                            }) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
+                                        .fill(DS.Color.surfaceHigh)
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: "qrcode.viewfinder")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundColor(DS.Color.primary)
+                                }
                             }
 
-                            Text(appState.isConnected ? "Đã kết nối" : "Chưa kết nối")
-                                .font(DS.Font.mono(12))
-                                .foregroundColor(appState.isConnected ? DS.Color.success : DS.Color.warning)
+                            // Status Dot with pulse effect (iOS 17+)
+                            HStack(spacing: DS.Spacing.xs.rawValue) {
+                                if #available(iOS 17.0, *) {
+                                    Image(systemName: appState.isConnected ? "circle.fill" : "circle.dotted")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(appState.isConnected ? DS.Color.success : DS.Color.warning)
+                                        .symbolEffect(.pulse, isActive: true)
+                                } else {
+                                    Circle()
+                                        .fill(appState.isConnected ? DS.Color.success : DS.Color.warning)
+                                        .frame(width: 10, height: 10)
+                                }
+
+                                Text(appState.isConnected ? "Đã kết nối" : "Chưa kết nối")
+                                    .font(DS.Font.mono(12))
+                                    .foregroundColor(appState.isConnected ? DS.Color.success : DS.Color.warning)
+                            }
+                            .padding(.horizontal, DS.Spacing.sm.rawValue)
+                            .padding(.vertical, DS.Spacing.xs.rawValue)
+                            .background(DS.Color.surfaceHigh)
+                            .cornerRadius(DS.Radius.iconBlock.rawValue)
                         }
-                        .padding(.horizontal, DS.Spacing.sm.rawValue)
-                        .padding(.vertical, DS.Spacing.xs.rawValue)
-                        .background(DS.Color.surfaceHigh)
-                        .cornerRadius(DS.Radius.iconBlock.rawValue)
                     }
 
                     // Main TransferCard (The ONLY element allowed to have shadow)
@@ -210,6 +227,13 @@ struct HomeView: View {
             }
             .sheet(item: $shareItem) { item in
                 ShareSheet(activityItems: [item.url])
+            }
+            .sheet(isPresented: $showingQRScanner) {
+                QRScannerView { scannedIP, scannedPort in
+                    Task {
+                        _ = await appState.connect(toIP: scannedIP, port: scannedPort)
+                    }
+                }
             }
         }
     }

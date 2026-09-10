@@ -38,6 +38,7 @@ struct ReceiveView: View {
 
     @State private var previewItem: URLItem?
     @State private var shareItem: URLItem?
+    @State private var showingQRScanner = false
 
     var body: some View {
         NavigationStack {
@@ -79,6 +80,20 @@ struct ReceiveView: View {
             .sheet(item: $shareItem) { item in
                 ShareSheet(activityItems: [item.url])
             }
+            .sheet(isPresented: $showingQRScanner) {
+                QRScannerView { scannedIP, scannedPort in
+                    Task {
+                        showToast("Đang kết nối đến \(scannedIP)...")
+                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort)
+                        if ok {
+                            showToast("Đã kết nối với máy tính thành công!")
+                            await loadFiles()
+                        } else {
+                            showToast("Không thể kết nối đến \(scannedIP):\(scannedPort)")
+                        }
+                    }
+                }
+            }
             .overlay(alignment: .bottom) {
                 if let msg = toastMessage {
                     Text(msg)
@@ -112,16 +127,31 @@ struct ReceiveView: View {
 
                 Spacer()
 
-                Button(action: {
-                    Task { await loadFiles() }
-                }) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
-                            .fill(.ultraThinMaterial)
-                            .frame(width: 32, height: 32)
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(DS.Color.primary)
+                HStack(spacing: DS.Spacing.xs.rawValue) {
+                    Button(action: {
+                        showingQRScanner = true
+                    }) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
+                                .fill(.ultraThinMaterial)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "qrcode.viewfinder")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(DS.Color.primary)
+                        }
+                    }
+
+                    Button(action: {
+                        Task { await loadFiles() }
+                    }) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
+                                .fill(.ultraThinMaterial)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(DS.Color.primary)
+                        }
                     }
                 }
             }
@@ -141,9 +171,31 @@ struct ReceiveView: View {
                         .foregroundColor(DS.Color.warning)
                         .multilineTextAlignment(.center)
 
-                    PrimaryButton(title: "Thử lại", action: {
-                        Task { await loadFiles() }
-                    })
+                    HStack(spacing: DS.Spacing.md.rawValue) {
+                        PrimaryButton(title: "Thử lại", action: {
+                            Task { await loadFiles() }
+                        })
+
+                        Button(action: {
+                            showingQRScanner = true
+                        }) {
+                            HStack(spacing: DS.Spacing.xs.rawValue) {
+                                Image(systemName: "qrcode.viewfinder")
+                                    .font(.system(size: 14, weight: .semibold))
+                                Text("Quét mã QR")
+                                    .font(DS.Font.headline())
+                            }
+                            .foregroundColor(Color.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(DS.Color.surfaceHigh)
+                            .cornerRadius(DS.Radius.button.rawValue)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DS.Radius.button.rawValue)
+                                    .stroke(DS.Color.primary.opacity(0.6), lineWidth: 1)
+                            )
+                        }
+                    }
                 }
                 .padding(DS.Spacing.xl.rawValue)
                 .background(DS.Color.surface)
@@ -462,13 +514,21 @@ struct ReceiveView: View {
 
     // MARK: - Helper Methods
     private func loadFiles() async {
+        isLoading = true
+        errorMessage = nil
+
+        // If not connected, proactively re-attempt connection & Bonjour discovery
+        if !appState.isConnected {
+            appState.discoveryService.startDiscovery()
+            await appState.connect()
+        }
+
         guard let url = appState.serverBaseURL, appState.isConnected else {
-            errorMessage = "Chưa kết nối với máy tính. Hãy kiểm tra cài đặt mạng."
+            errorMessage = "Chưa kết nối với máy tính. Hãy bấm 'Quét mã QR' hoặc kiểm tra Wi-Fi."
+            isLoading = false
             return
         }
 
-        isLoading = true
-        errorMessage = nil
         do {
             availableFiles = try await APIClient.shared.fetchFiles(serverURL: url)
             isLoading = false

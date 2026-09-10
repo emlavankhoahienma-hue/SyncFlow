@@ -76,25 +76,38 @@ class AppState: ObservableObject {
         }
     }
 
+    func connect(toIP ip: String, port: Int = 8765) async -> Bool {
+        self.serverIP = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.serverPort = port
+        await connect()
+        return isConnected
+    }
+
     func connect() async {
         guard let url = serverBaseURL else { return }
         connectionState = .connecting
 
-        do {
-            let (deviceName, _) = try await APIClient.shared.checkHealth(serverURL: url)
-            
-            // Perform zero-secret E2EE handshake
+        for attempt in 1...2 {
             do {
-                try await CryptoManager.shared.performHandshake(serverURL: url)
-            } catch {
-                print("E2EE Handshake warning (fallback to standard transfer if unconfigured): \(error)")
-            }
+                let (deviceName, _) = try await APIClient.shared.checkHealth(serverURL: url)
+                
+                // Perform zero-secret E2EE handshake
+                do {
+                    try await CryptoManager.shared.performHandshake(serverURL: url)
+                } catch {
+                    print("E2EE Handshake notice: \(error)")
+                }
 
-            connectionState = .connected(serverName: deviceName)
-            syncWebSocket.connect(to: url)
-        } catch {
-            connectionState = .disconnected
+                connectionState = .connected(serverName: deviceName)
+                syncWebSocket.connect(to: url)
+                return
+            } catch {
+                if attempt < 2 {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                }
+            }
         }
+        connectionState = .disconnected
     }
 
     func disconnect() {

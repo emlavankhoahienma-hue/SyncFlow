@@ -1,5 +1,8 @@
 import flet as ft
+import io
+import base64
 from .theme import DSColor, DSSpacing, DSRadius
+from server.discovery import BonjourServer
 
 class HomePage(ft.Container):
     def __init__(self, page: ft.Page, on_navigate):
@@ -128,9 +131,21 @@ class HomePage(ft.Container):
             on_click=lambda _: self.on_navigate(2),
         )
 
+        btn_qr = ft.OutlinedButton(
+            "Mã QR kết nối",
+            icon=ft.Icons.QR_CODE_2_ROUNDED,
+            style=ft.ButtonStyle(
+                color=DSColor.PRIMARY,
+                shape=ft.RoundedRectangleBorder(radius=DSRadius.BUTTON),
+                padding=ft.Padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.MD),
+                side=ft.BorderSide(width=1, color=DSColor.PRIMARY),
+            ),
+            on_click=self.show_qr_dialog,
+        )
+
         quick_actions = ft.Row(
             spacing=DSSpacing.MD,
-            controls=[btn_send, btn_receive]
+            controls=[btn_send, btn_receive, btn_qr]
         )
 
         # Recent activities
@@ -208,3 +223,70 @@ class HomePage(ft.Container):
         self.active_title.value = name
         self.active_subtitle.value = "Đã hoàn tất truyền tải"
         self.main_page.update()
+
+    def generate_qr(self, data: str) -> str:
+        try:
+            import qrcode
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=2,
+            )
+            qr.add_data(data)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG")
+            return base64.b64encode(buffer.getvalue()).decode("utf-8")
+        except Exception:
+            return ""
+
+    def show_qr_dialog(self, _=None):
+        local_ip = BonjourServer.get_local_ip()
+        server_url = f"http://{local_ip}:8765"
+        qr_b64 = self.generate_qr(server_url)
+
+        def close_dialog(_):
+            dlg.open = False
+            self.main_page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                spacing=DSSpacing.MD,
+                controls=[
+                    ft.Icon(ft.Icons.QR_CODE_ROUNDED, color=DSColor.PRIMARY, size=24),
+                    ft.Text("Mã QR kết nối iPhone", size=18, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_PRIMARY),
+                ]
+            ),
+            content=ft.Container(
+                width=340,
+                padding=DSSpacing.MD,
+                content=ft.Column(
+                    main_axis_alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=DSSpacing.MD,
+                    tight=True,
+                    controls=[
+                        ft.Image(
+                            src=f"data:image/png;base64,{qr_b64}",
+                            width=220,
+                            height=220,
+                            fit=ft.BoxFit.CONTAIN,
+                            border_radius=ft.BorderRadius.all(DSRadius.CARD),
+                        ) if qr_b64 else ft.Text("QR Unavailable"),
+                        ft.Text(f"IP: {local_ip}  •  Port: 8765", size=15, weight=ft.FontWeight.BOLD, font_family="monospace", color=DSColor.PRIMARY),
+                        ft.Text("Mở SyncFlow trên iPhone > bấm 'Quét mã QR' ở màn hình Nhận hoặc Cài đặt để kết nối tức thì!", size=12, text_align=ft.TextAlign.CENTER, color=DSColor.TEXT_MUTED),
+                    ]
+                )
+            ),
+            actions=[
+                ft.TextButton("Đóng", on_click=close_dialog, style=ft.ButtonStyle(color=DSColor.PRIMARY))
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.main_page.dialog = dlg
+        dlg.open = True
+        self.main_page.update()
+
