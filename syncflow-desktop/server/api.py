@@ -2,6 +2,7 @@ import socket
 import os
 import time
 import uuid
+import struct
 import logging
 from pathlib import Path
 from typing import List, Optional
@@ -16,9 +17,12 @@ from .models import (
     CompleteUploadResponse,
     HealthResponse,
     ConfigModel,
+    HandshakeRequest,
+    HandshakeResponse,
 )
 from .storage import storage_manager, CHUNK_SIZE
 from .ws import ws_manager
+from .security import crypto_manager
 from convert.heic import convert_heic_to_png
 from convert.hevc import convert_hevc_to_mp4
 
@@ -39,6 +43,24 @@ DEVICE_NAME = socket.gethostname() or "Desktop PC"
 @app.get("/health", response_model=HealthResponse)
 async def health():
     return HealthResponse(device_name=DEVICE_NAME, version="1.0.0", status="ok")
+
+@app.post("/auth/handshake", response_model=HandshakeResponse)
+async def auth_handshake(req: HandshakeRequest):
+    """
+    Performs ephemeral X25519 key exchange to establish an End-to-End Encrypted (E2EE) session.
+    All keys exist solely in memory - ZERO SECRETS EVER SAVED IN GIT OR DISK.
+    """
+    try:
+        server_pub = crypto_manager.perform_handshake(req.client_public_key)
+        return HandshakeResponse(server_public_key=server_pub, status="ok")
+    except Exception as e:
+        logger.error(f"Handshake failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Handshake failed: {str(e)}")
+
+@app.get("/auth/key")
+async def auth_get_key():
+    """Returns the current server ephemeral public key."""
+    return {"server_public_key": crypto_manager.get_server_public_key_b64()}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -72,14 +94,28 @@ async def upload_chunk(
     transfer_id: str,
     request: Request,
     x_chunk_index: Optional[int] = Header(None, alias="X-Chunk-Index"),
+    x_encrypted: Optional[str] = Header(None, alias="X-Encrypted"),
 ):
     """
-    Receives 1MB binary chunk. Appends to .part file.
+    Receives 1MB binary chunk.
+    If encrypted (X-Encrypted: 1 or E2EE active), decrypts AES-256-GCM chunk
+    verifying cryptographic integrity before writing to .part file.
     Broadcasts progress via WebSocket.
     """
     chunk_data = await request.body()
     if not chunk_data:
         raise HTTPException(status_code=400, detail="Empty chunk data")
+
+    # Anti-tampering & Decryption
+    if x_encrypted == "1" or (crypto_manager.is_e2ee_active and x_encrypted != "0"):
+        try:
+            chunk_data = crypto_manager.decrypt_chunk(chunk_data)
+        except Exception as e:
+            logger.error(f"Anti-tamper / Decryption verification failed for chunk {x_chunk_index}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cryptographic verification failed: tampered or corrupted chunk ({e})"
+            )
 
     try:
         received_bytes, speed, eta = storage_manager.write_chunk(
@@ -175,8 +211,8 @@ async def download_meta(file_id: str):
 @app.get("/download/{file_id}")
 async def download_file(file_id: str, request: Request):
     """
-    Downloads file with support for HTTP Range requests (RFC 7233).
-    Ensures seamless pause/resume on iOS client.
+    Downloads file with support for E2EE chunk encryption and HTTP Range requests (RFC 7233).
+    Ensures seamless pause/resume and Wireshark-proof transmission.
     """
     file_path = storage_manager.get_file_for_download(file_id)
     if not file_path or not file_path.exists():
@@ -184,6 +220,39 @@ async def download_file(file_id: str, request: Request):
 
     file_size = file_path.stat().st_size
     range_header = request.headers.get("Range")
+    x_encrypted = request.headers.get("X-Encrypted")
+    use_encryption = (x_encrypted == "1" or x_encrypted == "true") and crypto_manager.is_e2ee_active
+
+    if use_encryption:
+        # Stream chunks encrypted with AES-256-GCM, framed with 4-byte big-endian length prefix
+        async def iter_encrypted():
+            sent = 0
+            last_t = time.time()
+            last_b = 0
+            with open(file_path, "rb") as f:
+                while chunk := f.read(CHUNK_SIZE):
+                    sent += len(chunk)
+                    now = time.time()
+                    dt = now - last_t
+                    if dt >= 0.25:
+                        speed = (sent - last_b) / dt if dt > 0 else 0
+                        rem = max(0, file_size - sent)
+                        eta = rem / speed if speed > 0 else 0
+                        await ws_manager.send_progress(file_id, sent, file_size, speed, eta)
+                        last_t = now
+                        last_b = sent
+                    enc_chunk = crypto_manager.encrypt_chunk(chunk)
+                    # Length prefix (4 bytes) + encrypted chunk (nonce + ciphertext + tag)
+                    yield struct.pack(">I", len(enc_chunk)) + enc_chunk
+            await ws_manager.send_done(file_id, str(file_path))
+
+        headers = {
+            "Accept-Ranges": "none",
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": f'attachment; filename="{file_path.name}"',
+            "X-Encrypted": "1"
+        }
+        return StreamingResponse(iter_encrypted(), headers=headers)
 
     if range_header:
         # e.g. "bytes=1048576-" or "bytes=0-1048575"
@@ -234,7 +303,7 @@ async def download_file(file_id: str, request: Request):
         }
         return StreamingResponse(iter_range(), status_code=206, headers=headers)
 
-    # Full file stream
+    # Full file stream (plaintext)
     async def iter_full():
         sent = 0
         last_t = time.time()

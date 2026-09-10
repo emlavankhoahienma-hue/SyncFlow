@@ -95,23 +95,30 @@ class ChunkUploader {
             }
 
             let bytesToRead = min(Int64(Self.chunkSize), totalSize - currentBytes)
-            guard let chunkData = try fileHandle.read(upToCount: Int(bytesToRead)), !chunkData.isEmpty else {
+            guard let rawChunkData = try fileHandle.read(upToCount: Int(bytesToRead)), !rawChunkData.isEmpty else {
                 break
             }
+
+            // Anti-Wireshark & Anti-Tamper: Encrypt chunk with AES-256-GCM
+            let isEncrypted = CryptoManager.shared.isE2EEActive
+            let chunkDataToSend = try CryptoManager.shared.encryptChunk(rawChunkData)
 
             let chunkURL = serverBaseURL.appendingPathComponent("upload/chunk/\(transferId)")
             var chunkReq = URLRequest(url: chunkURL)
             chunkReq.httpMethod = "POST"
             chunkReq.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
             chunkReq.setValue(String(chunkIndex), forHTTPHeaderField: "X-Chunk-Index")
-            chunkReq.httpBody = chunkData
+            if isEncrypted {
+                chunkReq.setValue("1", forHTTPHeaderField: "X-Encrypted")
+            }
+            chunkReq.httpBody = chunkDataToSend
 
             let (_, chunkResp) = try await URLSession.shared.data(for: chunkReq)
             guard let httpChunk = chunkResp as? HTTPURLResponse, httpChunk.statusCode == 200 else {
                 throw NSError(domain: "ChunkUploader", code: 502, userInfo: [NSLocalizedDescriptionKey: "Lỗi gửi chunk \(chunkIndex)"])
             }
 
-            currentBytes += Int64(chunkData.count)
+            currentBytes += Int64(rawChunkData.count)
             chunkIndex += 1
 
             let now = Date()

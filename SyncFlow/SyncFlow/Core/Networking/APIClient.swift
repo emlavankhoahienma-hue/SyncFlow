@@ -85,6 +85,9 @@ class APIClient {
 
         var req = URLRequest(url: downloadURL)
         req.timeoutInterval = 60.0
+        if CryptoManager.shared.isE2EEActive {
+            req.setValue("1", forHTTPHeaderField: "X-Encrypted")
+        }
         if existingBytes > 0 {
             req.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
         }
@@ -111,32 +114,86 @@ class APIClient {
         var currentBytes: Int64 = existingBytes
         var lastTime = Date()
         var lastBytes = currentBytes
-        var buffer = Data()
-        let bufferCapacity = 64 * 1024 // 64KB buffer for efficient disk writes
 
-        for try await byte in asyncBytes {
-            buffer.append(byte)
-            if buffer.count >= bufferCapacity {
-                try fileHandle.write(contentsOf: buffer)
-                currentBytes += Int64(buffer.count)
-                buffer.removeAll(keepingCapacity: true)
+        let isEncrypted = (http.value(forHTTPHeaderField: "X-Encrypted") == "1")
 
-                let now = Date()
-                let timeDiff = now.timeIntervalSince(lastTime)
-                if timeDiff >= 0.25 {
-                    let speed = Double(currentBytes - lastBytes) / timeDiff
-                    let remaining = max(0, fileItem.size - currentBytes)
-                    let eta = speed > 0 ? Double(remaining) / speed : 0.0
-                    onProgress(currentBytes, speed, eta)
-                    lastTime = now
-                    lastBytes = currentBytes
+        if isEncrypted {
+            // Read framed encrypted chunks: [4 bytes length N] + [N bytes AES-GCM data]
+            var streamBuffer = Data()
+            var expectedLength: Int? = nil
+
+            for try await byte in asyncBytes {
+                streamBuffer.append(byte)
+
+                while true {
+                    if expectedLength == nil {
+                        if streamBuffer.count >= 4 {
+                            let lenBytes = streamBuffer.prefix(4)
+                            let length = lenBytes.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian }
+                            expectedLength = Int(length)
+                            streamBuffer.removeSubrange(0..<4)
+                        } else {
+                            break
+                        }
+                    }
+
+                    if let length = expectedLength {
+                        if streamBuffer.count >= length {
+                            let encryptedChunk = streamBuffer.prefix(length)
+                            streamBuffer.removeSubrange(0..<length)
+                            expectedLength = nil
+
+                            let decryptedChunk = try CryptoManager.shared.decryptChunk(Data(encryptedChunk))
+                            try fileHandle.write(contentsOf: decryptedChunk)
+                            currentBytes += Int64(decryptedChunk.count)
+
+                            let now = Date()
+                            let timeDiff = now.timeIntervalSince(lastTime)
+                            if timeDiff >= 0.25 {
+                                let speed = Double(currentBytes - lastBytes) / timeDiff
+                                let remaining = max(0, fileItem.size - currentBytes)
+                                let eta = speed > 0 ? Double(remaining) / speed : 0.0
+                                onProgress(currentBytes, speed, eta)
+                                lastTime = now
+                                lastBytes = currentBytes
+                            }
+                        } else {
+                            break
+                        }
+                    } else {
+                        break
+                    }
                 }
             }
-        }
+        } else {
+            // Standard plaintext stream
+            var buffer = Data()
+            let bufferCapacity = 64 * 1024 // 64KB buffer for efficient disk writes
 
-        if !buffer.isEmpty {
-            try fileHandle.write(contentsOf: buffer)
-            currentBytes += Int64(buffer.count)
+            for try await byte in asyncBytes {
+                buffer.append(byte)
+                if buffer.count >= bufferCapacity {
+                    try fileHandle.write(contentsOf: buffer)
+                    currentBytes += Int64(buffer.count)
+                    buffer.removeAll(keepingCapacity: true)
+
+                    let now = Date()
+                    let timeDiff = now.timeIntervalSince(lastTime)
+                    if timeDiff >= 0.25 {
+                        let speed = Double(currentBytes - lastBytes) / timeDiff
+                        let remaining = max(0, fileItem.size - currentBytes)
+                        let eta = speed > 0 ? Double(remaining) / speed : 0.0
+                        onProgress(currentBytes, speed, eta)
+                        lastTime = now
+                        lastBytes = currentBytes
+                    }
+                }
+            }
+
+            if !buffer.isEmpty {
+                try fileHandle.write(contentsOf: buffer)
+                currentBytes += Int64(buffer.count)
+            }
         }
 
         try? fileHandle.synchronize()

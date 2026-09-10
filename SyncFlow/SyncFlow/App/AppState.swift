@@ -82,6 +82,14 @@ class AppState: ObservableObject {
 
         do {
             let (deviceName, _) = try await APIClient.shared.checkHealth(serverURL: url)
+            
+            // Perform zero-secret E2EE handshake
+            do {
+                try await CryptoManager.shared.performHandshake(serverURL: url)
+            } catch {
+                print("E2EE Handshake warning (fallback to standard transfer if unconfigured): \(error)")
+            }
+
             connectionState = .connected(serverName: deviceName)
             syncWebSocket.connect(to: url)
         } catch {
@@ -90,6 +98,7 @@ class AppState: ObservableObject {
     }
 
     func disconnect() {
+        CryptoManager.shared.resetSession()
         syncWebSocket.disconnect()
         connectionState = .disconnected
     }

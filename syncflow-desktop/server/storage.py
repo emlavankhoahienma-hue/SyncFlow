@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from .models import FileMeta
+from .security import sanitize_filename
 
 CHUNK_SIZE = 1024 * 1024  # 1MB constant as mandated
 
@@ -115,8 +116,8 @@ class StorageManager:
                 verified = False
                 return False, temp_path, f"Hash mismatch: expected {expected_hash}, got {computed_hash}"
 
-        # Resolve unique filename in base_dir
-        target_name = meta.name
+        # Resolve unique filename in base_dir with anti-path-traversal protection
+        target_name = sanitize_filename(meta.name)
         if meta.ext and not target_name.endswith(f".{meta.ext}"):
             target_name = f"{target_name}.{meta.ext}"
 

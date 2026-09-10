@@ -40,3 +40,18 @@ Payload/
 
 # Binaries
 *.exe
+
+# Security & Zero-Secret Policy (Prevent ANY keys or secrets in Git)
+*.key
+*.pem
+*.pub
+*.crt
+*.p12
+*.pfx
+*.env
+*.env.*
+.env
+secrets/
+*.session
+*.log
+

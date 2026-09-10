@@ -41,3 +41,11 @@ class HealthResponse(BaseModel):
 class ConfigModel(BaseModel):
     storage_dir: str
     auto_convert: bool = True
+
+class HandshakeRequest(BaseModel):
+    client_public_key: str  # Base64 encoded 32-byte raw public key
+
+class HandshakeResponse(BaseModel):
+    server_public_key: str  # Base64 encoded 32-byte raw public key
+    status: str = "ok"
+
