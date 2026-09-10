@@ -223,7 +223,7 @@ if __name__ == "__main__":
         bonjour.start()
 
         try:
-            ft.run(target=main)
+            ft.run(main)
         finally:
             bonjour.stop()
             os._exit(0)
