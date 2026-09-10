@@ -73,19 +73,6 @@ class HomePage(ft.Container):
                 )
             ]
         )
-                            ),
-                            ft.Text(
-                                "Đang chạy (:8765)",
-                                size=12,
-                                weight=ft.FontWeight.W_500,
-                                color=DSColor.SUCCESS,
-                                font_family="monospace"
-                            ),
-                        ]
-                    )
-                )
-            ]
-        )
 
         self.active_status_label = ft.Text("Đang sẵn sàng", size=12, color=DSColor.PRIMARY, font_family="monospace")
         self.active_ring = ft.ProgressRing(width=48, height=48, stroke_width=5, value=0.0, color=DSColor.PRIMARY, bgcolor=DSColor.SURFACE_HIGH)

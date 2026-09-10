@@ -5,6 +5,7 @@ import uuid
 import struct
 import logging
 from pathlib import Path
+from typing import List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, Header, HTTPException, status, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
