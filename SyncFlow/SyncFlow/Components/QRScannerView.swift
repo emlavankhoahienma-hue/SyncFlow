@@ -27,7 +27,7 @@ struct QRScannerView: View {
 
                     ZStack {
                         RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color(hex: "#E2725B"), lineWidth: 3)
+                            .stroke(DS.Color.primary, lineWidth: 3)
                             .frame(width: 260, height: 260)
                             .background(Color.black.opacity(0.05))
 
@@ -87,7 +87,7 @@ struct QRScannerView: View {
                     Button("Đóng") {
                         dismiss()
                     }
-                    .foregroundColor(Color(hex: "#E2725B"))
+                    .foregroundColor(DS.Color.primary)
                 }
             }
         }
@@ -99,7 +99,7 @@ struct QRScannerView: View {
             path.addLine(to: CGPoint(x: 0, y: 0))
             path.addLine(to: CGPoint(x: 24, y: 0))
         }
-        .stroke(Color(hex: "#E2725B"), lineWidth: 4)
+        .stroke(DS.Color.primary, lineWidth: 4)
         .frame(width: 24, height: 24)
     }
 
@@ -110,12 +110,15 @@ struct QRScannerView: View {
 
         // Case 1: URL format like http://192.168.1.15:8765 or syncflow://connect?ip=...
         if let url = URL(string: trimmed) {
-            if url.scheme == "syncflow", let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-                if let ipItem = components.queryItems?.first(where: { .name == "ip" })?.value {
-                    parsedIP = ipItem
-                }
-                if let portItem = components.queryItems?.first(where: { .name == "port" })?.value, let p = Int(portItem) {
-                    parsedPort = p
+            if let scheme = url.scheme, scheme == "syncflow",
+               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+               let items = components.queryItems {
+                for q in items {
+                    if q.name == "ip", let val = q.value {
+                        parsedIP = val
+                    } else if q.name == "port", let val = q.value, let p = Int(val) {
+                        parsedPort = p
+                    }
                 }
             } else if let host = url.host {
                 parsedIP = host
@@ -138,9 +141,9 @@ struct QRScannerView: View {
 
         // Case 3: Raw IP or IP:Port (e.g. 192.168.1.15:8765 or 192.168.1.15)
         if parsedIP == nil {
-            let parts = trimmed.replacingOccurrences(of: "http://", with: "")
-                               .replacingOccurrences(of: "https://", with: "")
-                               .split(separator: "/")
+            let cleaned = trimmed.replacingOccurrences(of: "http://", with: "")
+                                 .replacingOccurrences(of: "https://", with: "")
+            let parts = cleaned.split(separator: "/")
             if let first = parts.first {
                 let ipPort = first.split(separator: ":")
                 if ipPort.count == 2, let p = Int(ipPort[1]) {

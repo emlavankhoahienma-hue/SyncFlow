@@ -40,11 +40,11 @@ struct SettingsView: View {
                         }
 
                         HStack {
-                            VStack { Divider().background(DS.Color.border) }
+                            VStack { Divider().background(DS.Color.surfaceHigh) }
                             Text("HOẶC NHẬP IP")
                                 .font(DS.Font.mono(10))
                                 .foregroundColor(DS.Color.textMuted)
-                            VStack { Divider().background(DS.Color.border) }
+                            VStack { Divider().background(DS.Color.surfaceHigh) }
                         }
                         .padding(.vertical, DS.Spacing.xs.rawValue)
 
@@ -154,7 +154,7 @@ struct SettingsView: View {
                                 .font(DS.Font.body())
                                 .foregroundColor(DS.Color.textPrimary)
                             Spacer()
-                            Text("1.0.3")
+                            Text("1.0.5")
                                 .font(DS.Font.mono(13))
                                 .foregroundColor(DS.Color.textMuted)
                         }
