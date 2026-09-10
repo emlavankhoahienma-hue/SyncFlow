@@ -2,8 +2,36 @@ import asyncio
 import threading
 import socket
 import logging
+import os
 import sys
 from pathlib import Path
+
+# File logging setup
+log_dir = Path.home() / ".syncflow"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "desktop.log"
+
+_log_stream = open(log_file, "a", encoding="utf-8")
+if sys.stdout is None:
+    sys.stdout = _log_stream
+if sys.stderr is None:
+    sys.stderr = _log_stream
+
+logging.basicConfig(
+    handlers=[logging.FileHandler(str(log_file), encoding="utf-8")],
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("syncflow.desktop")
+
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CURRENT_DIR))
+try:
+    os.chdir(CURRENT_DIR)
+except Exception:
+    pass
+
 import flet as ft
 import uvicorn
 
@@ -16,9 +44,6 @@ from ui.send_page import SendPage
 from ui.receive_page import ReceivePage
 from ui.progress_page import ProgressPage
 from ui.settings_page import SettingsPage
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("syncflow.desktop")
 
 # Server thread runner
 def run_fastapi_server():
@@ -185,16 +210,20 @@ def main(page: ft.Page):
     page.add(layout)
 
 if __name__ == "__main__":
-    # Start FastAPI server in background thread
-    server_thread = threading.Thread(target=run_fastapi_server, daemon=True)
-    server_thread.start()
-    logger.info("FastAPI server started on port 8765")
-
-    # Start Bonjour service
-    bonjour = BonjourServer(port=8765)
-    bonjour.start()
-
     try:
-        ft.app(target=main)
-    finally:
-        bonjour.stop()
+        # Start FastAPI server in background thread
+        server_thread = threading.Thread(target=run_fastapi_server, daemon=True)
+        server_thread.start()
+        logger.info("FastAPI server started on port 8765")
+
+        # Start Bonjour service
+        bonjour = BonjourServer(port=8765)
+        bonjour.start()
+
+        try:
+            ft.app(target=main)
+        finally:
+            bonjour.stop()
+            os._exit(0)
+    except Exception as e:
+        logger.exception(f"Fatal crash in main: {e}")
