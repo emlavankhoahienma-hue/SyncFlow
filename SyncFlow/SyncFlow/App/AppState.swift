@@ -40,6 +40,22 @@ class AppState: ObservableObject {
             self.serverIP = savedIP
         }
 
+        // Forward nested transferManager changes to AppState
+        transferManager.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        // Hook WebSocket events from desktop server
+        syncWebSocket.onDoneReceived = { [weak self] transferId, path in
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .transferDidComplete, object: path)
+                self?.objectWillChange.send()
+            }
+        }
+
         // Hook Bonjour discovery results
         discoveryService.$discoveredServers
             .sink { [weak self] servers in

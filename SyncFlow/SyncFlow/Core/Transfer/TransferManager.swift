@@ -2,6 +2,10 @@ import Foundation
 import SwiftUI
 import UIKit
 
+extension Notification.Name {
+    static let transferDidComplete = Notification.Name("SyncFlowTransferDidComplete")
+}
+
 @MainActor
 class TransferManager: ObservableObject {
     @Published var queue: [TransferItem] = []
@@ -116,6 +120,7 @@ class TransferManager: ObservableObject {
             }
             item.status = .completed
             triggerSuccessFeedback()
+            NotificationCenter.default.post(name: .transferDidComplete, object: item)
         } catch {
             item.status = .failed(error.localizedDescription)
             triggerErrorFeedback()
@@ -149,6 +154,7 @@ class TransferManager: ObservableObject {
             item.fileURL = localURL
             item.status = .completed
             triggerSuccessFeedback()
+            NotificationCenter.default.post(name: .transferDidComplete, object: item)
         } catch {
             item.status = .failed(error.localizedDescription)
             triggerErrorFeedback()

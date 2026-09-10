@@ -50,6 +50,7 @@ class DiscoveryService: NSObject, ObservableObject, NetServiceBrowserDelegate, N
 
     // MARK: - NetServiceDelegate
     func netServiceDidResolveAddress(_ sender: NetService) {
+        resolvingServices.removeAll { $0 == sender }
         guard let addresses = sender.addresses else { return }
 
         for addressData in addresses {

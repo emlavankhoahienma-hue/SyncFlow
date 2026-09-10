@@ -76,17 +76,23 @@ class APIClient {
             existingBytes = (attrs[.size] as? Int64) ?? 0
             if existingBytes >= fileItem.size {
                 return destinationURL // Already complete
+            } else if existingBytes > fileItem.size {
+                // Stale or invalid size, reset
+                try? FileManager.default.removeItem(at: destinationURL)
+                existingBytes = 0
             }
         }
 
         var req = URLRequest(url: downloadURL)
+        req.timeoutInterval = 60.0
         if existingBytes > 0 {
             req.setValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
         }
 
         let (asyncBytes, resp) = try await URLSession.shared.bytes(for: req)
         guard let http = resp as? HTTPURLResponse, (http.statusCode == 200 || http.statusCode == 206) else {
-            throw NSError(domain: "APIClient", code: 500, userInfo: [NSLocalizedDescriptionKey: "Lỗi tải file: HTTP \(String(describing: (resp as? HTTPURLResponse)?.statusCode))"])
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 500
+            throw NSError(domain: "APIClient", code: code, userInfo: [NSLocalizedDescriptionKey: "Lỗi tải file: HTTP \(code)"])
         }
 
         let fileHandle: FileHandle
@@ -97,7 +103,10 @@ class APIClient {
             FileManager.default.createFile(atPath: destinationURL.path, contents: nil)
             fileHandle = try FileHandle(forWritingTo: destinationURL)
         }
-        defer { try? fileHandle.close() }
+        defer {
+            try? fileHandle.synchronize()
+            try? fileHandle.close()
+        }
 
         var currentBytes: Int64 = existingBytes
         var lastTime = Date()
@@ -130,6 +139,7 @@ class APIClient {
             currentBytes += Int64(buffer.count)
         }
 
+        try? fileHandle.synchronize()
         onProgress(fileItem.size, 0, 0)
         return destinationURL
     }

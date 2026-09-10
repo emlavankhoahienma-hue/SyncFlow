@@ -17,7 +17,7 @@ class SyncWebSocket: ObservableObject {
         components.path = "/ws"
 
         guard let wsURL = components.url else { return }
-        self.serverURL = wsURL
+        self.serverURL = baseHttpURL
 
         let session = URLSession(configuration: .default)
         webSocketTask = session.webSocketTask(with: wsURL)

@@ -124,7 +124,7 @@ struct SettingsView: View {
                                 .font(DS.Font.body())
                                 .foregroundColor(DS.Color.textPrimary)
                             Spacer()
-                            Text("1.0.0")
+                            Text("1.0.3")
                                 .font(DS.Font.mono(13))
                                 .foregroundColor(DS.Color.textMuted)
                         }

@@ -61,6 +61,18 @@ struct ReceiveView: View {
                 await loadFiles()
                 loadLocalFiles()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .transferDidComplete)) { notif in
+                loadLocalFiles()
+                if let item = notif.object as? TransferItem, item.direction == .download {
+                    showToast("Đã tải xong '\(item.name)' • Chạm để xem hoặc chia sẻ")
+                }
+            }
+            .onReceive(appState.transferManager.$completedTransfers) { _ in
+                loadLocalFiles()
+            }
+            .onReceive(appState.transferManager.$activeTransfers) { _ in
+                loadLocalFiles()
+            }
             .sheet(item: $previewItem) { item in
                 QuickLookPreview(url: item.url)
             }
@@ -191,9 +203,9 @@ struct ReceiveView: View {
                     .foregroundColor(DS.Color.textPrimary)
                     .lineLimit(1)
 
-                Text(item.formattedSize)
+                Text(localMatch != nil ? "\(item.formattedSize) • Đã tải về máy" : item.formattedSize)
                     .font(DS.Font.mono(12))
-                    .foregroundColor(DS.Color.textMuted)
+                    .foregroundColor(localMatch != nil ? DS.Color.success : DS.Color.textMuted)
             }
 
             Spacer()
@@ -223,13 +235,30 @@ struct ReceiveView: View {
                     Button(action: {
                         previewItem = URLItem(url: local.url)
                     }) {
-                        Text("Xem")
-                            .font(DS.Font.headline())
-                            .foregroundColor(DS.Color.primary)
-                            .padding(.horizontal, DS.Spacing.sm.rawValue)
-                            .padding(.vertical, DS.Spacing.xs.rawValue)
-                            .background(DS.Color.surfaceHigh)
-                            .cornerRadius(DS.Radius.iconBlock.rawValue)
+                        HStack(spacing: DS.Spacing.xs.rawValue) {
+                            Image(systemName: "eye.fill")
+                                .font(.system(size: 11))
+                            Text("Xem")
+                                .font(DS.Font.headline())
+                        }
+                        .foregroundColor(DS.Color.primary)
+                        .padding(.horizontal, DS.Spacing.sm.rawValue)
+                        .padding(.vertical, DS.Spacing.xs.rawValue)
+                        .background(DS.Color.surfaceHigh)
+                        .cornerRadius(DS.Radius.iconBlock.rawValue)
+                    }
+
+                    Button(action: {
+                        shareItem = URLItem(url: local.url)
+                    }) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
+                                .fill(DS.Color.surfaceHigh)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(DS.Color.primary)
+                        }
                     }
 
                     Button(action: {
@@ -281,16 +310,34 @@ struct ReceiveView: View {
 
                 Spacer()
 
-                Button(action: {
-                    loadLocalFiles()
-                }) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
-                            .fill(.ultraThinMaterial)
-                            .frame(width: 32, height: 32)
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(DS.Color.primary)
+                HStack(spacing: DS.Spacing.xs.rawValue) {
+                    Button(action: {
+                        loadLocalFiles()
+                    }) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: DS.Radius.iconBlock.rawValue)
+                                .fill(.ultraThinMaterial)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(DS.Color.primary)
+                        }
+                    }
+
+                    Button(action: {
+                        openFilesApp()
+                    }) {
+                        HStack(spacing: DS.Spacing.xs.rawValue) {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 11))
+                            Text("Files")
+                                .font(DS.Font.headline())
+                        }
+                        .foregroundColor(DS.Color.primary)
+                        .padding(.horizontal, DS.Spacing.sm.rawValue)
+                        .padding(.vertical, DS.Spacing.xs.rawValue)
+                        .background(DS.Color.surfaceHigh)
+                        .cornerRadius(DS.Radius.iconBlock.rawValue)
                     }
                 }
             }
@@ -497,6 +544,12 @@ struct ReceiveView: View {
                     showToast("Cần cấp quyền truy cập Thư viện Ảnh trong Cài đặt")
                 }
             }
+        }
+    }
+
+    private func openFilesApp() {
+        if let url = URL(string: "shareddocuments://") {
+            UIApplication.shared.open(url)
         }
     }
 

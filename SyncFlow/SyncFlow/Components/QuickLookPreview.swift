@@ -5,20 +5,22 @@ import QuickLook
 struct QuickLookPreview: UIViewControllerRepresentable {
     let url: URL
 
-    func makeUIViewController(context: Context) -> UINavigationController {
+    @Environment(\.presentationMode) var presentationMode
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
         let controller = QLPreviewController()
         controller.dataSource = context.coordinator
-        let nav = UINavigationController(rootViewController: controller)
-        return nav
+        controller.delegate = context.coordinator
+        return controller
     }
 
-    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {}
+    func updateUIViewController(_ uiViewController: QLPreviewController, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    class Coordinator: NSObject, QLPreviewControllerDataSource {
+    class Coordinator: NSObject, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
         let parent: QuickLookPreview
 
         init(parent: QuickLookPreview) {
@@ -31,6 +33,10 @@ struct QuickLookPreview: UIViewControllerRepresentable {
 
         func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
             return parent.url as NSURL
+        }
+
+        func previewControllerDidDismiss(_ controller: QLPreviewController) {
+            parent.presentationMode.wrappedValue.dismiss()
         }
     }
 }
