@@ -44,8 +44,13 @@ class ConfigModel(BaseModel):
 
 class HandshakeRequest(BaseModel):
     client_public_key: str  # Base64 encoded 32-byte raw public key
+    pin: Optional[str] = None  # 6-digit pairing PIN displayed on PC screen
+    pairing_token: Optional[str] = None  # 128-bit pairing token embedded in QR
+    timestamp: Optional[int] = None  # Unix timestamp in seconds (anti-replay)
+    nonce: Optional[str] = None  # Unique random request nonce (anti-replay)
 
 class HandshakeResponse(BaseModel):
     server_public_key: str  # Base64 encoded 32-byte raw public key
+    session_id: str  # Authenticated session token for X-Session-ID
     status: str = "ok"
 

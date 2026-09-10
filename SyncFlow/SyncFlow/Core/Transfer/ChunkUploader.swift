@@ -46,6 +46,9 @@ class ChunkUploader {
         var initReq = URLRequest(url: initURL)
         initReq.httpMethod = "POST"
         initReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let sessionID = CryptoManager.shared.sessionID {
+            initReq.setValue(sessionID, forHTTPHeaderField: "X-Session-ID")
+        }
 
         let metaPayload: [String: Any] = [
             "meta": [
@@ -108,6 +111,9 @@ class ChunkUploader {
             chunkReq.httpMethod = "POST"
             chunkReq.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
             chunkReq.setValue(String(chunkIndex), forHTTPHeaderField: "X-Chunk-Index")
+            if let sessionID = CryptoManager.shared.sessionID {
+                chunkReq.setValue(sessionID, forHTTPHeaderField: "X-Session-ID")
+            }
             if isEncrypted {
                 chunkReq.setValue("1", forHTTPHeaderField: "X-Encrypted")
             }
@@ -137,6 +143,10 @@ class ChunkUploader {
         let completeURL = serverBaseURL.appendingPathComponent("upload/complete/\(transferId)")
         var compReq = URLRequest(url: completeURL)
         compReq.httpMethod = "POST"
+        if let sessionID = CryptoManager.shared.sessionID {
+            compReq.setValue(sessionID, forHTTPHeaderField: "X-Session-ID")
+        }
+
 
         let (compData, compResp) = try await URLSession.shared.data(for: compReq)
         guard let httpComp = compResp as? HTTPURLResponse, httpComp.statusCode == 200 else {

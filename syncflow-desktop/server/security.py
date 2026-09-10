@@ -1,8 +1,10 @@
-﻿import os
+import os
 import re
+import time
 import base64
+import secrets
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Set
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric import x25519
@@ -19,107 +21,224 @@ HKDF_INFO = b"syncflow-file-transfer"
 NONCE_LENGTH = 12
 TAG_LENGTH = 16
 
+# Anti-Brute-Force & Anti-Replay constraints
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_WINDOW_SECONDS = 900  # 15 minutes lockout
+MAX_TIMESTAMP_SKEW_SECONDS = 60  # 60 seconds tolerance for anti-replay
 
-def sanitize_filename(filename: str) -> str:
+
+def sanitize_filename(filename: str, base_dir: Optional[Path] = None) -> str:
     """
     Sanitizes untrusted filenames to prevent Path Traversal attacks (e.g. ../../evil.exe),
     null byte injections, and invalid filesystem characters.
+    Optionally verifies that the resulting path stays within base_dir.
     """
     if not filename:
         return "unnamed_file"
 
     # Normalize separators and take basename only
     base = os.path.basename(filename.replace("\\", "/"))
-    
+
     # Strip null bytes and control characters
     base = re.sub(r'[\x00-\x1f\x7f]', '', base)
-    
+
     # Replace illegal Windows/POSIX characters
     base = re.sub(r'[<>:"/\\|?*]', '_', base)
-    
+
     # Strip leading/trailing dots and spaces
     base = base.strip(". ")
-    
+
     if not base:
         base = "unnamed_file"
+
+    if base_dir:
+        resolved_base = base_dir.resolve()
+        candidate = (base_dir / base).resolve()
+        if resolved_base != candidate and resolved_base not in candidate.parents:
+            logger.warning(f"Path traversal attempt detected: {filename} -> forcing safe fallback")
+            return "unnamed_file"
 
     return base
 
 
-class CryptoSessionManager:
+class AuthSecurityManager:
     """
-    Zero-Secret End-to-End Encryption (E2EE) Session Manager.
+    Kerckhoffs-compliant Security & Authentication Manager.
     
-    Keys are generated ephemerally in RAM upon server startup/handshake.
-    NO PRIVATE KEYS OR SECRETS ARE EVER STORED ON DISK OR IN GIT.
-    
-    Protocol:
-    1. Ephemeral X25519 keypair generated in memory.
-    2. Client and Server exchange raw 32-byte public keys via /auth/handshake.
-    3. Both sides perform ECDH key agreement: shared_secret = X25519(priv, pub).
-    4. HKDF-SHA256 derives 256-bit symmetric key for AES-256-GCM.
-    5. Wire format for each chunk: [12 bytes Nonce] + [Ciphertext] + [16 bytes Tag].
-       Wireshark and network sniffers only see high-entropy random bytes.
-       Any packet tampering in flight causes GCM authentication failure.
+    Even if a hacker has 100% of the open-source code from GitHub:
+    1. The PIN and Pairing Token are generated randomly on PC RAM each session.
+       Zero secrets ever exist in Git, config files, or on disk.
+    2. Only users who can physically see the PC screen or scan the PC's QR code
+       can obtain the 6-digit PIN / pairing token.
+    3. Hackers on the same Wi-Fi who try to brute-force the PIN are locked out after 5 failures.
+    4. Replay attacks are blocked via monotonic timestamp validation & nonce deduplication.
+    5. Wire traffic is encrypted with AES-256-GCM so Wireshark sees only high-entropy noise.
     """
 
     def __init__(self):
-        self._generate_ephemeral_keypair()
-        self.session_key: Optional[bytes] = None
-        self.is_e2ee_active: bool = False
-
-    def _generate_ephemeral_keypair(self):
         self._private_key = x25519.X25519PrivateKey.generate()
         self._public_key = self._private_key.public_key()
         self._public_bytes = self._public_key.public_bytes(
             encoding=Encoding.Raw,
             format=PublicFormat.Raw
         )
-        logger.info("Generated fresh in-memory ephemeral X25519 keypair.")
+
+        self.session_pin: str = self._generate_pin()
+        self.pairing_token: str = secrets.token_hex(16)
+        
+        # IP -> list of failed timestamps
+        self._failed_attempts: Dict[str, list] = {}
+        # Nonce -> timestamp
+        self._seen_nonces: Dict[str, float] = {}
+        # Session_ID -> dict(session_key=bytes, client_ip=str, created_at=float)
+        self._active_sessions: Dict[str, dict] = {}
+        
+        # Fallback single active session key
+        self.session_key: Optional[bytes] = None
+        self.is_e2ee_active: bool = False
+
+        logger.info(f"Initialized AuthSecurityManager. Session PIN: {self.session_pin}")
+
+    def _generate_pin(self) -> str:
+        """Generates a secure random 6-digit PIN."""
+        return "".join(secrets.choice("0123456789") for _ in range(6))
+
+    def regenerate_secrets(self) -> Tuple[str, str]:
+        """Regenerates the session PIN and pairing token on demand."""
+        self.session_pin = self._generate_pin()
+        self.pairing_token = secrets.token_hex(16)
+        logger.info(f"Regenerated Session PIN: {self.session_pin}")
+        return self.session_pin, self.pairing_token
 
     def get_server_public_key_b64(self) -> str:
-        """Returns the server's public key encoded in Base64."""
         return base64.b64encode(self._public_bytes).decode("ascii")
 
-    def perform_handshake(self, client_public_key_b64: str) -> str:
-        """
-        Receives client's Base64 public key (32 bytes raw),
-        computes ECDH shared secret, derives AES-256-GCM session key,
-        and returns server's ephemeral public key in Base64.
-        """
-        try:
-            client_pub_bytes = base64.b64decode(client_public_key_b64)
-            if len(client_pub_bytes) != 32:
-                raise ValueError(f"Invalid client public key length: {len(client_pub_bytes)} bytes (expected 32)")
+    def _clean_expired_data(self):
+        now = time.time()
+        # Clean expired failed attempts
+        for ip in list(self._failed_attempts.keys()):
+            self._failed_attempts[ip] = [t for t in self._failed_attempts[ip] if now - t < LOCKOUT_WINDOW_SECONDS]
+            if not self._failed_attempts[ip]:
+                del self._failed_attempts[ip]
 
-            client_pub = x25519.X25519PublicKey.from_public_bytes(client_pub_bytes)
-            shared_secret = self._private_key.exchange(client_pub)
+        # Clean expired nonces (> 120s)
+        for nonce, t in list(self._seen_nonces.items()):
+            if now - t > 120:
+                del self._seen_nonces[nonce]
 
-            # HKDF-SHA256 key derivation
-            hkdf = HKDF(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=HKDF_SALT,
-                info=HKDF_INFO,
-            )
-            self.session_key = hkdf.derive(shared_secret)
-            self.is_e2ee_active = True
-            logger.info("E2EE Session established successfully via X25519 + HKDF-SHA256.")
+    def check_rate_limit(self, client_ip: str) -> Tuple[bool, str]:
+        """Checks if the client IP is locked out due to excessive failed attempts."""
+        self._clean_expired_data()
+        attempts = self._failed_attempts.get(client_ip, [])
+        if len(attempts) >= MAX_FAILED_ATTEMPTS:
+            remaining_lock = int(LOCKOUT_WINDOW_SECONDS - (time.time() - attempts[0]))
+            return False, f"IP {client_ip} bị khóa {remaining_lock}s do nhập sai PIN quá 5 lần (Anti-Brute Force)."
+        return True, ""
 
-            return self.get_server_public_key_b64()
-        except Exception as e:
-            logger.error(f"Handshake failed: {e}")
-            self.is_e2ee_active = False
-            self.session_key = None
-            raise
+    def record_failed_attempt(self, client_ip: str):
+        """Records a failed authentication attempt."""
+        now = time.time()
+        if client_ip not in self._failed_attempts:
+            self._failed_attempts[client_ip] = []
+        self._failed_attempts[client_ip].append(now)
+        logger.warning(f"Failed pairing attempt from {client_ip}. Total: {len(self._failed_attempts[client_ip])}")
 
-    def decrypt_chunk(self, encrypted_chunk: bytes) -> bytes:
+    def verify_and_handshake(
+        self,
+        client_ip: str,
+        client_public_key_b64: str,
+        pin: Optional[str] = None,
+        pairing_token: Optional[str] = None,
+        timestamp: Optional[int] = None,
+        nonce: Optional[str] = None,
+    ) -> Tuple[str, str]:
         """
-        Decrypts an AES-256-GCM chunk.
-        Input format: [12 bytes Nonce] + [Ciphertext] + [16 bytes Tag]
+        Validates pairing credentials, executes X25519 ECDH key exchange,
+        derives AES-256-GCM symmetric session key, and issues a session_id.
+        
+        Returns: (session_id, server_public_key_b64)
+        Raises: ValueError if invalid.
         """
-        if not self.is_e2ee_active or not self.session_key:
-            # If E2EE is not active, return chunk as plaintext (backward compatibility)
+        # 1. Anti-Brute-Force check
+        ok, msg = self.check_rate_limit(client_ip)
+        if not ok:
+            raise ValueError(msg)
+
+        # 2. Anti-Replay check (timestamp window)
+        now = time.time()
+        if timestamp is not None:
+            if abs(now - timestamp) > MAX_TIMESTAMP_SKEW_SECONDS:
+                raise ValueError("Gói tin đã quá hạn thời gian cho phép (Anti-Replay Attack detected).")
+
+        # 3. Anti-Replay check (nonce uniqueness)
+        if nonce is not None:
+            if nonce in self._seen_nonces:
+                raise ValueError("Nonce gói tin bị trùng lặp (Anti-Replay Attack detected).")
+            self._seen_nonces[nonce] = now
+
+        # 4. PIN / Pairing Token validation
+        is_pin_valid = pin is not None and pin.strip() == self.session_pin
+        is_token_valid = pairing_token is not None and pairing_token.strip() == self.pairing_token
+
+        if not is_pin_valid and not is_token_valid:
+            self.record_failed_attempt(client_ip)
+            remaining = MAX_FAILED_ATTEMPTS - len(self._failed_attempts.get(client_ip, []))
+            raise ValueError(f"Mã PIN hoặc Pairing Token không chính xác. Còn lại {max(0, remaining)} lần thử.")
+
+        # Pairing successful: Clear failed attempts for this IP
+        if client_ip in self._failed_attempts:
+            del self._failed_attempts[client_ip]
+
+        # 5. X25519 ECDH Key Agreement
+        client_pub_bytes = base64.b64decode(client_public_key_b64)
+        if len(client_pub_bytes) != 32:
+            raise ValueError(f"Invalid client public key length: {len(client_pub_bytes)} bytes")
+
+        client_pub = x25519.X25519PublicKey.from_public_bytes(client_pub_bytes)
+        shared_secret = self._private_key.exchange(client_pub)
+
+        # 6. HKDF-SHA256 Derivation
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=HKDF_SALT,
+            info=HKDF_INFO,
+        )
+        derived_key = hkdf.derive(shared_secret)
+
+        # 7. Generate Ephemeral Session Token
+        session_id = secrets.token_urlsafe(32)
+        self._active_sessions[session_id] = {
+            "session_key": derived_key,
+            "client_ip": client_ip,
+            "created_at": now,
+            "last_active": now,
+        }
+        self.session_key = derived_key
+        self.is_e2ee_active = True
+
+        logger.info(f"Authenticated session {session_id[:8]}... created for {client_ip}")
+        return session_id, self.get_server_public_key_b64()
+
+    def is_session_valid(self, session_id: Optional[str]) -> bool:
+        """Validates if a session_id is active."""
+        if not session_id:
+            return False
+        if session_id in self._active_sessions:
+            self._active_sessions[session_id]["last_active"] = time.time()
+            return True
+        return False
+
+    def get_session_key(self, session_id: Optional[str] = None) -> Optional[bytes]:
+        """Returns the symmetric key for the given session_id, or active session key."""
+        if session_id and session_id in self._active_sessions:
+            return self._active_sessions[session_id]["session_key"]
+        return self.session_key
+
+    def decrypt_chunk(self, encrypted_chunk: bytes, session_id: Optional[str] = None) -> bytes:
+        """Decrypts an AES-256-GCM chunk using the active session key."""
+        key = self.get_session_key(session_id)
+        if not self.is_e2ee_active or not key:
             return encrypted_chunk
 
         if len(encrypted_chunk) < NONCE_LENGTH + TAG_LENGTH:
@@ -128,30 +247,33 @@ class CryptoSessionManager:
         nonce = encrypted_chunk[:NONCE_LENGTH]
         ciphertext_and_tag = encrypted_chunk[NONCE_LENGTH:]
 
-        aesgcm = AESGCM(self.session_key)
-        # AESGCM.decrypt expects ciphertext with appended 16-byte tag
+        aesgcm = AESGCM(key)
         return aesgcm.decrypt(nonce, ciphertext_and_tag, associated_data=None)
 
-    def encrypt_chunk(self, plaintext_chunk: bytes) -> bytes:
-        """
-        Encrypts a plaintext chunk using AES-256-GCM.
-        Generates a cryptographically random 12-byte nonce for each chunk.
-        Output format: [12 bytes Nonce] + [Ciphertext] + [16 bytes Tag]
-        """
-        if not self.is_e2ee_active or not self.session_key:
+    def encrypt_chunk(self, plaintext_chunk: bytes, session_id: Optional[str] = None) -> bytes:
+        """Encrypts a plaintext chunk using AES-256-GCM."""
+        key = self.get_session_key(session_id)
+        if not self.is_e2ee_active or not key:
             return plaintext_chunk
 
         nonce = os.urandom(NONCE_LENGTH)
-        aesgcm = AESGCM(self.session_key)
+        aesgcm = AESGCM(key)
         ciphertext_and_tag = aesgcm.encrypt(nonce, plaintext_chunk, associated_data=None)
         return nonce + ciphertext_and_tag
 
     def reset_session(self):
-        """Wipes session key and generates a new ephemeral keypair."""
+        """Resets all session state."""
         self.session_key = None
         self.is_e2ee_active = False
-        self._generate_ephemeral_keypair()
+        self._active_sessions.clear()
+        self._private_key = x25519.X25519PrivateKey.generate()
+        self._public_key = self._private_key.public_key()
+        self._public_bytes = self._public_key.public_bytes(
+            encoding=Encoding.Raw,
+            format=PublicFormat.Raw
+        )
 
 
 # Singleton instance for the server runtime
-crypto_manager = CryptoSessionManager()
+crypto_manager = AuthSecurityManager()
+

@@ -45,35 +45,40 @@
 
 ---
 
-## 2. Bảo Mật Cấp Cao: Chống Nghe Lén Wireshark & Zero-Secret E2EE
+### 2. Bảo Mật Cấp Cao: Chuẩn Quân Sự Kerckhoffs & Zero-Secret E2EE
 
-Ứng dụng được thiết kế với cơ chế bảo mật truyền dữ liệu chủ động, giải quyết triệt để nguy cơ lộ dữ liệu trong môi trường mạng Wi-Fi công cộng hoặc khi có kẻ xấu xâm nhập mạng nội bộ:
+Ứng dụng tuân thủ nghiêm ngặt **Nguyên lý Kerckhoffs**: *"Một hệ thống mật mã phải an toàn ngay cả khi mọi thông tin về hệ thống (bao gồm toàn bộ mã nguồn trên GitHub) đều bị kẻ tấn công biết rõ."*
 
-1. **Chống bắt gói tin Wireshark (Anti-Sniffing / E2EE)**:
-   - Toàn bộ các phân mảnh dữ liệu (chunks) truyền tải giữa iPhone và PC qua mạng Wi-Fi đều được mã hóa bằng thuật toán đối xứng **AES-256-GCM**.
-   - Bất kỳ ai dùng phần mềm bắt gói tin (như **Wireshark**, tcpdump, Charles Proxy) trong cùng mạng LAN chỉ nhìn thấy các khối dữ liệu nhị phân ngẫu nhiên (pseudorandom entropy cao), hoàn toàn không thể giải mã hay đọc được hình ảnh, video, tên file hoặc tài liệu của bạn.
+1. **Mã PIN 6 Số & Token Ghép Đôi Động Trên RAM (Không Lưu Trên Git)**:
+   - Khi khởi động, Server Desktop tự động sinh một mã PIN 6 số (`secrets.choice`) và một Pairing Token 128-bit hoàn toàn ngẫu nhiên **chỉ tồn tại trong RAM máy tính**.
+   - Mã PIN và Token chỉ hiển thị trực quan trên **màn hình máy tính** và được nhúng vào **mã QR**.
+   - Bất kỳ ai trên cùng mạng Wi-Fi (dù đọc toàn bộ mã nguồn trên GitHub) cố gắng gửi lệnh handshake mà không có mã PIN đúng sẽ bị **chặn ngay lập tức (HTTP 403 Forbidden)**.
 
-2. **Chính Sách Không Lưu Bí Mật (Zero Secrets in Git)**:
-   - **Tuyệt đối không lưu private key, mật khẩu, token hay pre-shared key nào trong mã nguồn Git.**
-   - Mỗi lần ứng dụng khởi chạy hoặc kết nối, iPhone (`CryptoKit.Curve25519`) và Máy tính (`cryptography.x25519`) sẽ tự động sinh một cặp khóa phù du (**Ephemeral Keypair**) ngẫu nhiên trong **RAM**.
-   - Hai thiết bị trao đổi Public Key (32 byte) qua endpoint `/auth/handshake` và bắt tay thỏa thuận khóa bí mật chung (**ECDH Key Agreement**).
-   - Hàm dẫn xuất khóa **HKDF-SHA256** tạo ra khóa đối xứng 256-bit trong RAM. Khóa này tự hủy ngay khi ngắt kết nối hoặc thoát app. Dù mã nguồn Git có công khai thì các phiên truyền tải trong quá khứ hay tương lai cũng không thể bị giải mã.
+2. **Chống Tấn Công Dò Mật Khẩu (Anti-Brute Force Rate Limiter)**:
+   - Nếu một địa chỉ IP trên mạng nội bộ thử sai mã PIN quá 5 lần, server sẽ lập tức **khóa IP đó trong 15 phút**. Kẻ tấn công không thể dùng bot tự động dò 1.000.000 tổ hợp PIN.
 
-3. **Phát hiện can thiệp và chèn dữ liệu (Anti-Tampering & MITM Detection)**:
-   - Mỗi chunk mã hóa đi kèm một **Auth Tag** 16-byte theo chuẩn Galois/Counter Mode (GCM).
-   - Nếu có kẻ tấn công thực hiện tấn công trung gian (Man-in-the-middle, ARP spoofing) cố tình sửa đổi dù chỉ 1 bit trên đường truyền, quá trình giải mã sẽ báo lỗi xác thực ngay lập tức và server/client sẽ hủy bỏ tác vụ truyền tệp để bảo vệ an toàn hệ thống.
+3. **Chống Tấn Công Phát Lại (Anti-Replay Protection)**:
+   - Mọi gói tin bắt tay đều kèm theo timestamp và nonce ngẫu nhiên duy nhất.
+   - Gói tin quá hạn $\pm 60$ giây hoặc nonce đã từng xuất hiện sẽ bị từ chối ngay lập tức, ngăn chặn việc hacker ghi âm lại gói tin mạng rồi phát lại sau.
 
-4. **Chống tấn công vượt thư mục (Anti-Path Traversal)**:
-   - Tên tệp gửi từ client được chuẩn hóa và khử toàn bộ ký tự nguy hiểm (`../`, `..\\`, ký tự điều khiển, null byte) để đảm bảo tệp tải lên không bao giờ ghi đè ra ngoài thư mục quy định.
+4. **Chống Bắt Gói Tin Wireshark (Anti-Sniffing / AES-256-GCM E2EE)**:
+   - Toàn bộ chunk truyền tải đều được mã hóa bằng **AES-256-GCM** với khóa đối xứng bắt tay qua **Curve25519 / X25519 ECDH + HKDF-SHA256**.
+   - Bất kỳ ai dùng Wireshark, tcpdump, Charles Proxy chỉ thấy các byte ngẫu nhiên (entropy cao), không thể đọc được nội dung ảnh, video, tài liệu.
+
+5. **Phát Hiện Can Thiệp Dữ Liệu (Anti-Tampering & MITM)**:
+   - Thẻ xác thực **16-byte Poly1305/GCM Tag** bảo vệ toàn vẹn từng bit dữ liệu. Sửa đổi 1 bit sẽ lập tức làm sập phiên truyền và cảnh báo người dùng.
+
+6. **Chống Vượt Thư Mục (Anti-Path Traversal)**:
+   - Khử sạch toàn bộ `../`, `..\\`, ký tự điều khiển, và xác thực đường dẫn tuyệt đối đảm bảo file chỉ được lưu trong thư mục quy định.
 
 ---
 
 ## 3. Cài Đặt & Chạy Trên Máy Tính
 
-### 3.1 Chạy trực tiếp qua Shortcut hoặc Launcher
-* Nếu bạn đã có file `SyncFlow.exe` (hoặc shortcut trên Desktop):
-  - Nhấp đúp vào **SyncFlow** trên Desktop để mở ngay ứng dụng.
-  - Bạn có thể nhấp chuột phải vào icon ứng dụng dưới Taskbar và chọn **Pin to taskbar** để tiện mở lần sau.
+### 3.1 Tải bản đóng gói sẵn (.zip) từ GitHub Releases (Khuyên dùng)
+* Tải tệp `SyncFlow-Windows-x64.zip` từ mục **[Releases](https://github.com/emlavankhoahienma-hue/SyncFlow/releases)**.
+* Giải nén và nhấp đúp vào `SyncFlow.exe` để sử dụng ngay lập tức mà không cần cài đặt Python.
+* Nhấp chuột phải vào icon ứng dụng dưới Taskbar và chọn **Pin to taskbar** để tiện mở lần sau.
 
 ### 3.2 Chạy từ mã nguồn Python
 1. Đảm bảo máy tính đã cài đặt **Python 3.10 trở lên** (khuyên dùng Python 3.11 hoặc 3.12).

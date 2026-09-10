@@ -3,6 +3,7 @@ import io
 import base64
 from .theme import DSColor, DSSpacing, DSRadius
 from server.discovery import BonjourServer
+from server.security import crypto_manager
 
 class HomePage(ft.Container):
     def __init__(self, page: ft.Page, on_navigate):
@@ -12,7 +13,7 @@ class HomePage(ft.Container):
         self.content = self.build_ui()
 
     def build_ui(self):
-        # Header with Title and Connection Status
+        # Header with Title, PIN Badge and Connection Status
         header = ft.Row(
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -36,18 +37,42 @@ class HomePage(ft.Container):
                         ),
                     ]
                 ),
-                ft.Container(
-                    padding=ft.Padding.symmetric(horizontal=DSSpacing.MD, vertical=DSSpacing.XS),
-                    border_radius=12,
-                    bgcolor=DSColor.SURFACE_HIGH,
-                    content=ft.Row(
-                        spacing=DSSpacing.SM,
-                        controls=[
-                            ft.Container(
-                                width=8,
-                                height=8,
-                                border_radius=4,
-                                bgcolor=DSColor.SUCCESS,
+                ft.Row(
+                    spacing=DSSpacing.SM,
+                    controls=[
+                        ft.Container(
+                            padding=ft.Padding.symmetric(horizontal=DSSpacing.MD, vertical=DSSpacing.XS),
+                            border_radius=12,
+                            bgcolor=DSColor.SURFACE_HIGH,
+                            content=ft.Row(
+                                spacing=DSSpacing.SM,
+                                controls=[
+                                    ft.Icon(ft.Icons.SHIELD_ROUNDED, color=DSColor.PRIMARY, size=14),
+                                    ft.Text(f"PIN: {crypto_manager.session_pin}", size=12, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_PRIMARY),
+                                ]
+                            )
+                        ),
+                        ft.Container(
+                            padding=ft.Padding.symmetric(horizontal=DSSpacing.MD, vertical=DSSpacing.XS),
+                            border_radius=12,
+                            bgcolor=DSColor.SURFACE_HIGH,
+                            content=ft.Row(
+                                spacing=DSSpacing.SM,
+                                controls=[
+                                    ft.Container(
+                                        width=8,
+                                        height=8,
+                                        border_radius=4,
+                                        bgcolor=DSColor.SUCCESS,
+                                    ),
+                                    ft.Text("Đang chạy", size=12, weight=ft.FontWeight.W_500, color=DSColor.TEXT_MUTED),
+                                ]
+                            )
+                        )
+                    ]
+                )
+            ]
+        )
                             ),
                             ft.Text(
                                 "Đang chạy (:8765)",
@@ -244,24 +269,15 @@ class HomePage(ft.Container):
 
     def show_qr_dialog(self, _=None):
         local_ip = BonjourServer.get_local_ip()
-        server_url = f"http://{local_ip}:8765"
-        qr_b64 = self.generate_qr(server_url)
 
-        def close_dialog(_):
-            dlg.open = False
-            self.main_page.update()
+        def build_dialog_content():
+            pin = crypto_manager.session_pin
+            token = crypto_manager.pairing_token
+            server_url = f"http://{local_ip}:8765?pin={pin}&token={token}"
+            qr_b64 = self.generate_qr(server_url)
 
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                spacing=DSSpacing.MD,
-                controls=[
-                    ft.Icon(ft.Icons.QR_CODE_ROUNDED, color=DSColor.PRIMARY, size=24),
-                    ft.Text("Mã QR kết nối iPhone", size=18, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_PRIMARY),
-                ]
-            ),
-            content=ft.Container(
-                width=340,
+            return ft.Container(
+                width=360,
                 padding=DSSpacing.MD,
                 content=ft.Column(
                     main_axis_alignment=ft.MainAxisAlignment.CENTER,
@@ -276,15 +292,52 @@ class HomePage(ft.Container):
                             fit=ft.BoxFit.CONTAIN,
                             border_radius=ft.BorderRadius.all(DSRadius.CARD),
                         ) if qr_b64 else ft.Text("QR Unavailable"),
-                        ft.Text(f"IP: {local_ip}  •  Port: 8765", size=15, weight=ft.FontWeight.BOLD, font_family="monospace", color=DSColor.PRIMARY),
-                        ft.Text("Mở SyncFlow trên iPhone > bấm 'Quét mã QR' ở màn hình Nhận hoặc Cài đặt để kết nối tức thì!", size=12, text_align=ft.TextAlign.CENTER, color=DSColor.TEXT_MUTED),
+                        ft.Container(
+                            padding=ft.Padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.SM),
+                            bgcolor=DSColor.SURFACE_HIGH,
+                            border_radius=ft.BorderRadius.all(DSRadius.BUTTON),
+                            border=ft.border.all(1, DSColor.PRIMARY),
+                            content=ft.Row(
+                                main_axis_alignment=ft.MainAxisAlignment.CENTER,
+                                spacing=DSSpacing.SM,
+                                controls=[
+                                    ft.Icon(ft.Icons.LOCK_ROUNDED, size=16, color=DSColor.PRIMARY),
+                                    ft.Text("MÃ PIN:", size=13, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_MUTED),
+                                    ft.Text(pin, size=20, weight=ft.FontWeight.BOLD, color=DSColor.PRIMARY, font_family="monospace"),
+                                ]
+                            )
+                        ),
+                        ft.Text(f"IP: {local_ip}  •  Port: 8765", size=14, weight=ft.FontWeight.BOLD, font_family="monospace", color=DSColor.TEXT_PRIMARY),
+                        ft.Text("Mã PIN & Token sinh ngẫu nhiên trên RAM máy tính. Hacker dù biết code trên GitHub cũng không thể xâm nhập nếu không thấy màn hình này!", size=11, text_align=ft.TextAlign.CENTER, color=DSColor.TEXT_MUTED),
                     ]
                 )
+            )
+
+        def on_regen_pin(_):
+            crypto_manager.regenerate_secrets()
+            dlg.content = build_dialog_content()
+            self.content = self.build_ui()
+            self.main_page.update()
+
+        def close_dialog(_):
+            dlg.open = False
+            self.main_page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                spacing=DSSpacing.MD,
+                controls=[
+                    ft.Icon(ft.Icons.QR_CODE_ROUNDED, color=DSColor.PRIMARY, size=24),
+                    ft.Text("Mã QR & PIN Bảo Vệ", size=18, weight=ft.FontWeight.BOLD, color=DSColor.TEXT_PRIMARY),
+                ]
             ),
+            content=build_dialog_content(),
             actions=[
-                ft.TextButton("Đóng", on_click=close_dialog, style=ft.ButtonStyle(color=DSColor.PRIMARY))
+                ft.TextButton("Đổi mã PIN mới", on_click=on_regen_pin, style=ft.ButtonStyle(color=DSColor.TEXT_MUTED)),
+                ft.TextButton("Đóng", on_click=close_dialog, style=ft.ButtonStyle(color=DSColor.PRIMARY)),
             ],
-            actions_alignment=ft.MainAxisAlignment.END,
+            actions_alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         )
         self.main_page.dialog = dlg
         dlg.open = True

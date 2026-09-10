@@ -23,6 +23,10 @@ class AppState: ObservableObject {
     let discoveryService = DiscoveryService()
     let syncWebSocket = SyncWebSocket()
 
+    @Published var pairingPIN: String = ""
+    @Published var pairingToken: String? = nil
+    @Published var lastConnectionError: String? = nil
+
     private var cancellables = Set<AnyCancellable>()
 
     var serverBaseURL: URL? {
@@ -76,9 +80,11 @@ class AppState: ObservableObject {
         }
     }
 
-    func connect(toIP ip: String, port: Int = 8765) async -> Bool {
+    func connect(toIP ip: String, port: Int = 8765, pin: String? = nil, token: String? = nil) async -> Bool {
         self.serverIP = ip.trimmingCharacters(in: .whitespacesAndNewlines)
         self.serverPort = port
+        if let p = pin, !p.isEmpty { self.pairingPIN = p }
+        if let t = token, !t.isEmpty { self.pairingToken = t }
         await connect()
         return isConnected
     }
@@ -86,22 +92,31 @@ class AppState: ObservableObject {
     func connect() async {
         guard let url = serverBaseURL else { return }
         connectionState = .connecting
+        lastConnectionError = nil
 
         for attempt in 1...2 {
             do {
                 let (deviceName, _) = try await APIClient.shared.checkHealth(serverURL: url)
                 
-                // Perform zero-secret E2EE handshake
+                // Perform zero-secret E2EE handshake guarded by PIN / QR Token
                 do {
-                    try await CryptoManager.shared.performHandshake(serverURL: url)
+                    try await CryptoManager.shared.performHandshake(
+                        serverURL: url,
+                        pin: pairingPIN.isEmpty ? nil : pairingPIN,
+                        pairingToken: pairingToken
+                    )
                 } catch {
-                    print("E2EE Handshake notice: \(error)")
+                    print("E2EE Handshake error: \(error.localizedDescription)")
+                    lastConnectionError = error.localizedDescription
+                    connectionState = .disconnected
+                    return
                 }
 
                 connectionState = .connected(serverName: deviceName)
                 syncWebSocket.connect(to: url)
                 return
             } catch {
+                lastConnectionError = error.localizedDescription
                 if attempt < 2 {
                     try? await Task.sleep(nanoseconds: 300_000_000)
                 }

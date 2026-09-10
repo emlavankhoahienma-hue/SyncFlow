@@ -1,4 +1,4 @@
-﻿import Foundation
+import Foundation
 import CryptoKit
 
 /// Zero-Secret End-to-End Encryption (E2EE) Manager using Apple CryptoKit.
@@ -13,6 +13,7 @@ public class CryptoManager {
     private var privateKey: Curve25519.KeyAgreement.PrivateKey
     private var sessionKey: SymmetricKey?
 
+    public private(set) var sessionID: String?
     public private(set) var isE2EEActive: Bool = false
 
     private init() {
@@ -24,6 +25,7 @@ public class CryptoManager {
     public func resetSession() {
         self.privateKey = Curve25519.KeyAgreement.PrivateKey()
         self.sessionKey = nil
+        self.sessionID = nil
         self.isE2EEActive = false
     }
 
@@ -32,23 +34,43 @@ public class CryptoManager {
         return privateKey.publicKey.rawRepresentation.base64EncodedString()
     }
 
-    /// Performs ECDH handshake with the Desktop server to establish an encrypted session.
-    public func performHandshake(serverURL: URL) async throws {
+    /// Performs ECDH handshake guarded by PC screen PIN or QR Pairing Token.
+    public func performHandshake(serverURL: URL, pin: String? = nil, pairingToken: String? = nil) async throws {
         let handshakeURL = serverURL.appendingPathComponent("auth/handshake")
         var request = URLRequest(url: handshakeURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 5.0
+        request.timeoutInterval = 6.0
 
-        let payload: [String: String] = [
-            "client_public_key": publicKeyBase64
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let nonce = UUID().uuidString
+
+        var payload: [String: Any] = [
+            "client_public_key": publicKeyBase64,
+            "timestamp": timestamp,
+            "nonce": nonce
         ]
+        if let p = pin, !p.isEmpty {
+            payload["pin"] = p
+        }
+        if let t = pairingToken, !t.isEmpty {
+            payload["pairing_token"] = t
+        }
+
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 500
-            throw NSError(domain: "CryptoManager", code: code, userInfo: [NSLocalizedDescriptionKey: "Handshake thất bại: HTTP \(code)"])
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NSError(domain: "CryptoManager", code: 500, userInfo: [NSLocalizedDescriptionKey: "Không có phản hồi từ máy chủ"])
+        }
+
+        if httpResponse.statusCode != 200 {
+            var errorMsg = "Xác thực handshake thất bại: HTTP \(httpResponse.statusCode)"
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let detail = json["detail"] as? String {
+                errorMsg = detail
+            }
+            throw NSError(domain: "CryptoManager", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMsg])
         }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -56,6 +78,8 @@ public class CryptoManager {
               let serverKeyData = Data(base64Encoded: serverKeyB64) else {
             throw NSError(domain: "CryptoManager", code: 500, userInfo: [NSLocalizedDescriptionKey: "Phản hồi handshake không hợp lệ"])
         }
+
+        self.sessionID = json["session_id"] as? String
 
         // Import server public key
         let serverPublicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: serverKeyData)

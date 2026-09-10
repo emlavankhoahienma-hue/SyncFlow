@@ -81,15 +81,16 @@ struct ReceiveView: View {
                 ShareSheet(activityItems: [item.url])
             }
             .sheet(isPresented: $showingQRScanner) {
-                QRScannerView { scannedIP, scannedPort in
+                QRScannerView { scannedIP, scannedPort, scannedPIN, scannedToken in
                     Task {
                         showToast("Đang kết nối đến \(scannedIP)...")
-                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort)
+                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort, pin: scannedPIN, token: scannedToken)
                         if ok {
                             showToast("Đã kết nối với máy tính thành công!")
                             await loadFiles()
                         } else {
-                            showToast("Không thể kết nối đến \(scannedIP):\(scannedPort)")
+                            let err = appState.lastConnectionError ?? "Không thể kết nối đến \(scannedIP):\(scannedPort)"
+                            showToast(err)
                         }
                     }
                 }

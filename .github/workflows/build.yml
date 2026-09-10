@@ -1,4 +1,4 @@
-name: Build Unsigned IPA & Release
+name: Build SyncFlow (iOS & Windows) & Release
 on:
   push:
     branches: ['main']
@@ -6,10 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-ios:
+    name: Build iOS (Unsigned IPA)
     runs-on: macos-14
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -35,17 +34,72 @@ jobs:
           name: SyncFlow-unsigned-ipa
           path: SyncFlow-unsigned.ipa
 
+  build-windows:
+    name: Build Windows (Desktop App)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r syncflow-desktop/requirements.txt pyinstaller
+      - name: Build with PyInstaller
+        shell: pwsh
+        run: |
+          cd syncflow-desktop
+          pyinstaller --noconfirm --onedir --windowed --name "SyncFlow" --icon "assets/syncflow.ico" --add-data "assets;assets" main.py
+          Compress-Archive -Path dist/SyncFlow/* -DestinationPath ../SyncFlow-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SyncFlow-Windows-x64
+          path: SyncFlow-Windows-x64.zip
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-ios, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: SyncFlow-unsigned-ipa
+      - uses: actions/download-artifact@v4
+        with:
+          name: SyncFlow-Windows-x64
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: SyncFlow-unsigned.ipa
-          name: SyncFlow iOS Release ${{ github.ref_name }}
+          files: |
+            SyncFlow-unsigned.ipa
+            SyncFlow-Windows-x64.zip
+          name: SyncFlow Release ${{ github.ref_name }}
           body: |
-            ## 🚀 SyncFlow Unsigned IPA Build
-            - Phiên bản: `${{ github.ref_name }}`
-            - Cài đặt qua **Sideloadly** (miễn phí), **TrollStore** hoặc **AltStore**.
-            - Hỗ trợ iOS 17.0+, đầy đủ tính năng Apple QuickLook Preview, Native ShareSheet, lưu Photos và đồng bộ tệp 2 chiều.
+            ## 🚀 SyncFlow Release ${{ github.ref_name }}
+            
+            ### 📱 iOS (iPhone / iPad)
+            - Tệp cài đặt: `SyncFlow-unsigned.ipa`
+            - Hỗ trợ: iOS 17.0+
+            - Cài đặt qua: **Sideloadly** (khuyên dùng), **TrollStore** hoặc **AltStore**.
+            
+            ### 🖥️ Windows (Desktop App)
+            - Tệp cài đặt: `SyncFlow-Windows-x64.zip`
+            - Hỗ trợ: Windows 10, Windows 11 (64-bit)
+            - Cách dùng: Giải nén và chạy trực tiếp `SyncFlow.exe`.
+            
+            ---
+            ### 🛡️ Tính Năng Bảo Mật Vượt Trội (Kerckhoffs Compliance)
+            - **Mã PIN & Token ngẫu nhiên trên RAM**: Không lưu bất kỳ key nào trong Git.
+            - **Chống Hacker LAN**: Ngay cả khi hacker nắm rõ 100% mã nguồn trên GitHub, hacker không thể kết nối nếu không thấy màn hình máy tính (quét mã QR hoặc nhập PIN 6 số).
+            - **Anti-Brute Force**: Khóa IP sau 5 lần nhập sai PIN.
+            - **Anti-Replay Attack**: Kiểm tra timestamp và chống trùng lặp nonce.
+            - **End-to-End Encryption (E2EE)**: Mã hóa toàn bộ dữ liệu truyền tải bằng AES-256-GCM (Wireshark không thể đọc trộm).
           draft: false
           prerelease: false
         env:

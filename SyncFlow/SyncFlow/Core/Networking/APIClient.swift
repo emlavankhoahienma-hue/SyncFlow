@@ -51,6 +51,9 @@ class APIClient {
         let filesURL = serverURL.appendingPathComponent("files")
         var req = URLRequest(url: filesURL)
         req.timeoutInterval = 5.0
+        if let sessionID = CryptoManager.shared.sessionID {
+            req.setValue(sessionID, forHTTPHeaderField: "X-Session-ID")
+        }
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
@@ -85,6 +88,9 @@ class APIClient {
 
         var req = URLRequest(url: downloadURL)
         req.timeoutInterval = 60.0
+        if let sessionID = CryptoManager.shared.sessionID {
+            req.setValue(sessionID, forHTTPHeaderField: "X-Session-ID")
+        }
         if CryptoManager.shared.isE2EEActive {
             req.setValue("1", forHTTPHeaderField: "X-Encrypted")
         }

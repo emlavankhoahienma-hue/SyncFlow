@@ -1,9 +1,9 @@
-﻿import SwiftUI
+import SwiftUI
 import AVFoundation
 
 struct QRScannerView: View {
     @Environment(\.dismiss) private var dismiss
-    var onCodeScanned: (String, Int) -> Void
+    var onCodeScanned: (String, Int, String?, String?) -> Void
 
     @State private var isTorchOn = false
     @State private var errorMessage: String?
@@ -107,8 +107,10 @@ struct QRScannerView: View {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         var parsedIP: String?
         var parsedPort: Int = 8765
+        var parsedPIN: String?
+        var parsedToken: String?
 
-        // Case 1: URL format like http://192.168.1.15:8765 or syncflow://connect?ip=...
+        // Case 1: URL format like http://192.168.1.15:8765?pin=... or syncflow://connect?ip=...
         if let url = URL(string: trimmed) {
             if let scheme = url.scheme, scheme == "syncflow",
                let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -118,6 +120,10 @@ struct QRScannerView: View {
                         parsedIP = val
                     } else if q.name == "port", let val = q.value, let p = Int(val) {
                         parsedPort = p
+                    } else if q.name == "pin", let val = q.value {
+                        parsedPIN = val
+                    } else if q.name == "token", let val = q.value {
+                        parsedToken = val
                     }
                 }
             } else if let host = url.host {
@@ -125,10 +131,20 @@ struct QRScannerView: View {
                 if let p = url.port {
                     parsedPort = p
                 }
+                if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                   let items = components.queryItems {
+                    for q in items {
+                        if q.name == "pin", let val = q.value {
+                            parsedPIN = val
+                        } else if q.name == "token", let val = q.value {
+                            parsedToken = val
+                        }
+                    }
+                }
             }
         }
 
-        // Case 2: JSON format {"ip":"192.168.1.15","port":8765}
+        // Case 2: JSON format {"ip":"192.168.1.15","port":8765,"pin":"482910","token":"..."}
         if parsedIP == nil, let data = trimmed.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let ip = json["ip"] as? String {
@@ -136,6 +152,12 @@ struct QRScannerView: View {
             }
             if let p = json["port"] as? Int {
                 parsedPort = p
+            }
+            if let pin = json["pin"] as? String {
+                parsedPIN = pin
+            }
+            if let token = json["token"] as? String {
+                parsedToken = token
             }
         }
 
@@ -157,7 +179,7 @@ struct QRScannerView: View {
 
         if let ip = parsedIP, !ip.isEmpty {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            onCodeScanned(ip, parsedPort)
+            onCodeScanned(ip, parsedPort, parsedPIN, parsedToken)
             dismiss()
         }
     }

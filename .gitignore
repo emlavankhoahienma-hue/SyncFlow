@@ -40,6 +40,7 @@ Payload/
 
 # Binaries
 *.exe
+*.zip
 
 # Security & Zero-Secret Policy (Prevent ANY keys or secrets in Git)
 *.key

@@ -55,6 +55,13 @@ struct SettingsView: View {
                             keyboardType: .decimalPad
                         )
 
+                        MaterialIconTextField(
+                            systemIcon: "lock.shield",
+                            placeholder: "Mã PIN 6 số trên PC (nếu có)",
+                            text: $appState.pairingPIN,
+                            keyboardType: .numberPad
+                        )
+
                         PrimaryButton(
                             title: isConnecting ? "Đang kết nối..." : "Kết nối",
                             icon: "bolt.fill",
@@ -154,7 +161,7 @@ struct SettingsView: View {
                                 .font(DS.Font.body())
                                 .foregroundColor(DS.Color.textPrimary)
                             Spacer()
-                            Text("1.0.5")
+                            Text("1.0.6")
                                 .font(DS.Font.mono(13))
                                 .foregroundColor(DS.Color.textMuted)
                         }
@@ -184,17 +191,17 @@ struct SettingsView: View {
                 inputIP = appState.serverIP
             }
             .sheet(isPresented: $showingQRScanner) {
-                QRScannerView { scannedIP, scannedPort in
+                QRScannerView { scannedIP, scannedPort, scannedPIN, scannedToken in
                     inputIP = scannedIP
                     Task {
                         isConnecting = true
                         connectionFeedback = "Đang kết nối đến \(scannedIP)..."
-                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort)
+                        let ok = await appState.connect(toIP: scannedIP, port: scannedPort, pin: scannedPIN, token: scannedToken)
                         isConnecting = false
                         if ok {
                             connectionFeedback = "Kết nối thành công qua mã QR!"
                         } else {
-                            connectionFeedback = "Không thể kết nối đến \(scannedIP):\(scannedPort)"
+                            connectionFeedback = appState.lastConnectionError ?? "Không thể kết nối đến \(scannedIP):\(scannedPort)"
                         }
                     }
                 }
@@ -213,7 +220,7 @@ struct SettingsView: View {
         if appState.isConnected {
             connectionFeedback = "Kết nối thành công!"
         } else {
-            connectionFeedback = "Không thể kết nối tới máy chủ. Vui lòng kiểm tra IP và cổng 8765."
+            connectionFeedback = appState.lastConnectionError ?? "Không thể kết nối tới máy chủ. Vui lòng kiểm tra IP và mã PIN."
         }
     }
 }
