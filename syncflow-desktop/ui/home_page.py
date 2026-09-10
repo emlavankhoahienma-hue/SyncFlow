@@ -268,7 +268,7 @@ class HomePage(ft.Container):
                 width=360,
                 padding=DSSpacing.MD,
                 content=ft.Column(
-                    main_axis_alignment=ft.MainAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=DSSpacing.MD,
                     tight=True,
@@ -284,9 +284,9 @@ class HomePage(ft.Container):
                             padding=ft.Padding.symmetric(horizontal=DSSpacing.LG, vertical=DSSpacing.SM),
                             bgcolor=DSColor.SURFACE_HIGH,
                             border_radius=ft.BorderRadius.all(DSRadius.BUTTON),
-                            border=ft.border.all(1, DSColor.PRIMARY),
+                            border=ft.Border.all(1, DSColor.PRIMARY),
                             content=ft.Row(
-                                main_axis_alignment=ft.MainAxisAlignment.CENTER,
+                                alignment=ft.MainAxisAlignment.CENTER,
                                 spacing=DSSpacing.SM,
                                 controls=[
                                     ft.Icon(ft.Icons.LOCK_ROUNDED, size=16, color=DSColor.PRIMARY),
