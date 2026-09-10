@@ -123,7 +123,7 @@ def main(page: ft.Page):
             def _done():
                 progress_page.mark_done(transfer_id, path)
                 home_page.mark_completed(Path(path).name if path else "Tệp")
-                receive_page.content = receive_page.build_ui()
+                receive_page.refresh_files()
                 page.update()
 
             try:
@@ -142,6 +142,8 @@ def main(page: ft.Page):
     )
 
     def render_content(index: int):
+        if index == 2 and hasattr(receive_page, "refresh_files"):
+            receive_page.refresh_files()
         content_area.content = pages[index]
         page.update()
 
