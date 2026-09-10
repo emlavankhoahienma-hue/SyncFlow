@@ -229,9 +229,9 @@ struct HomeView: View {
                 ShareSheet(activityItems: [item.url])
             }
             .sheet(isPresented: $showingQRScanner) {
-                QRScannerView { scannedIP, scannedPort in
+                QRScannerView { scannedIP, scannedPort, scannedPIN, scannedToken in
                     Task {
-                        _ = await appState.connect(toIP: scannedIP, port: scannedPort)
+                        _ = await appState.connect(toIP: scannedIP, port: scannedPort, pin: scannedPIN, token: scannedToken)
                     }
                 }
             }
